@@ -1,0 +1,50 @@
+# Source files (only include dist)
+src/
+tsconfig.json
+tsup.config.ts
+
+# Development files
+.gitignore
+.npmignore
+*.test.ts
+*.spec.ts
+
+# Documentation (keep README.md and LICENSE)
+examples/
+docs/
+
+# Build artifacts not needed
+*.tsbuildinfo
+.eslintcache
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files  
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Testing
+coverage/
+.nyc_output/
+test-output/
+temp/
+tmp/
+
+# Local development
+.env
+.env.*
+.claude/
+statusline-test-*.sh
+
+# CI/CD
+.github/
+.travis.yml
+.circleci/
