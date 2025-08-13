@@ -9,7 +9,7 @@ Transform your Claude Code experience with a beautiful, informative statusline s
 **Just run this one command:**
 
 ```bash
-npx cc-statusline init
+npx @chongdashu/cc-statusline init
 ```
 
 That's it! Answer 2 simple questions and restart Claude Code. Done! 🎉
@@ -52,7 +52,7 @@ Perfect for testing your statusline changes before restarting Claude Code.
 ### Global Installation
 ```bash
 # If you prefer global install
-npm install -g cc-statusline
+npm install -g @chongdashu/cc-statusline
 cc-statusline init
 ```
 
@@ -185,13 +185,14 @@ npm run dev
 
 ## Contributing
 
-Contributions welcome! Please read our [Contributing Guide](CONTRIBUTING.md).
+Contributions welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for detailed information on:
 
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)  
-5. Open Pull Request
+- Setting up the development environment
+- Code standards and conventions  
+- Testing your changes
+- Submitting pull requests
+
+Quick start: Fork → Clone → `npm install` → Make changes → Test → Submit PR
 
 ## License
 
