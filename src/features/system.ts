@@ -78,72 +78,74 @@ fi
 
 # Collect system metrics only if not cached
 if [[ $sys_cached -eq 0 ]]; then
-  # Platform detection
-  platform="\$(uname -s 2>/dev/null)"
+  # Performance timing for optimization measurement
+  [[ \$CC_STATUSLINE_DEBUG ]] && sys_start_time=\$(date +%s%3N 2>/dev/null || date +%s)
+  
+  # Cache platform detection to avoid repeated uname calls
+  if [[ -z \$SYS_PLATFORM ]]; then
+    SYS_PLATFORM="\$(uname -s 2>/dev/null)"
+    # Cache platform in user session for reuse
+    export SYS_PLATFORM
+  fi
+  platform="\$SYS_PLATFORM"
   
   case "\$platform" in
     Linux*)
-      # Linux - use /proc filesystem${config.showCPU ? `
-      # Try multiple CPU detection methods
-      if [[ -r /proc/stat ]]; then
-        # Method 1: Try vmstat if available (most accurate for CPU percentage)
-        if command -v vmstat >/dev/null 2>&1; then
-          vmstat_cpu=\$(vmstat 1 2 2>/dev/null | tail -1 | awk '{print 100-\$15}' 2>/dev/null)
-          if [[ \$vmstat_cpu =~ ^[0-9]+$ ]]; then
-            cpu_percent=\$vmstat_cpu
+      # Linux - optimized single-pass metric collection${config.showCPU ? `
+      # Optimized CPU detection - use best method first
+      if command -v vmstat >/dev/null 2>&1; then
+        # vmstat method (most accurate, single call)
+        vmstat_output=\$(vmstat 1 2 2>/dev/null | tail -1)
+        if [[ \$vmstat_output ]]; then
+          cpu_idle=\$(echo "\$vmstat_output" | awk '{print \$15}' 2>/dev/null)
+          if [[ \$cpu_idle =~ ^[0-9]+$ ]] && (( cpu_idle <= 100 )); then
+            cpu_percent=\$((100 - cpu_idle))
           fi
         fi
-        
-        # Method 2: Try top if vmstat failed
-        if [[ \$cpu_percent -eq 0 ]] && command -v top >/dev/null 2>&1; then
-          top_cpu=\$(top -bn1 | grep "Cpu(s)" | awk '{print \$2}' | sed 's/%us,//' 2>/dev/null)
-          if [[ \$top_cpu =~ ^[0-9.]+$ ]]; then
-            cpu_percent=\$(echo "\$top_cpu" | cut -d. -f1)
-          fi
-        fi
-        
-        # Method 3: Parse /proc/stat (fallback, less reliable but more precise when it works)
-        if [[ \$cpu_percent -eq 0 ]]; then
-          cpu_line=\$(head -1 /proc/stat 2>/dev/null)
-          if [[ \$cpu_line ]]; then
-            cpu_times=(\$cpu_line)
-            if [[ \${#cpu_times[@]} -ge 8 ]]; then
-              user=\${cpu_times[1]:-0}; nice=\${cpu_times[2]:-0}; system=\${cpu_times[3]:-0}
-              idle=\${cpu_times[4]:-0}; iowait=\${cpu_times[5]:-0}; irq=\${cpu_times[6]:-0}; softirq=\${cpu_times[7]:-0}
-              active=\$((user + nice + system + irq + softirq))
-              total=\$((active + idle + iowait))
-              if (( total > 0 )); then
-                cpu_percent=\$(( active * 100 / total ))
-              fi
+      fi
+      
+      # Fallback to /proc/stat if vmstat failed or unavailable
+      if [[ \$cpu_percent -eq 0 ]] && [[ -r /proc/stat ]]; then
+        cpu_line=\$(head -1 /proc/stat 2>/dev/null)
+        if [[ \$cpu_line ]]; then
+          cpu_times=(\$cpu_line)
+          if [[ \${#cpu_times[@]} -ge 8 ]]; then
+            # Integer-only calculation for better performance
+            user=\${cpu_times[1]:-0}; nice=\${cpu_times[2]:-0}; system=\${cpu_times[3]:-0}
+            idle=\${cpu_times[4]:-0}; iowait=\${cpu_times[5]:-0}; irq=\${cpu_times[6]:-0}; softirq=\${cpu_times[7]:-0}
+            active=\$((user + nice + system + irq + softirq))
+            total=\$((active + idle + iowait))
+            if (( total > 0 )); then
+              cpu_percent=\$(( active * 100 / total ))
             fi
           fi
         fi
       fi` : ''}${config.showRAM ? `
       
+      # Optimized memory parsing - single pass through /proc/meminfo
       if [[ -r /proc/meminfo ]]; then
-        # Parse memory info with better error handling
-        mem_total_kb=\$(grep "^MemTotal:" /proc/meminfo | awk '{print \$2}' 2>/dev/null)
-        mem_avail_kb=\$(grep "^MemAvailable:" /proc/meminfo | awk '{print \$2}' 2>/dev/null)
+        # Single awk pass for all memory metrics (more efficient)
+        eval "\$(awk '
+          /^MemTotal:/ { total = \$2 }
+          /^MemAvailable:/ { avail = \$2; has_avail = 1 }
+          /^MemFree:/ { free = \$2 }
+          /^Buffers:/ { buffers = \$2 }
+          /^Cached:/ { cached = \$2 }
+          END {
+            if (!has_avail) avail = free + buffers + cached
+            if (total > 0 && avail >= 0) {
+              used_kb = total - avail
+              # Integer math with proper rounding (add 524288 for 0.5GB)
+              used_gb = int((used_kb + 524288) / 1048576)
+              total_gb = int((total + 524288) / 1048576)
+              percent = int(used_kb * 100 / total)
+              printf "mem_total_kb=%d;mem_used_kb=%d;mem_used_gb=%d;mem_total_gb=%d;mem_percent=%d", total, used_kb, used_gb, total_gb, percent
+            }
+          }' /proc/meminfo 2>/dev/null)"
         
-        # Fallback to MemFree + Buffers + Cached if MemAvailable not available
-        if [[ ! \$mem_avail_kb ]]; then
-          mem_free=\$(grep "^MemFree:" /proc/meminfo | awk '{print \$2}' 2>/dev/null)
-          mem_buffers=\$(grep "^Buffers:" /proc/meminfo | awk '{print \$2}' 2>/dev/null)
-          mem_cached=\$(grep "^Cached:" /proc/meminfo | awk '{print \$2}' 2>/dev/null)
-          mem_avail_kb=\$(( \${mem_free:-0} + \${mem_buffers:-0} + \${mem_cached:-0} ))
-        fi
-        
-        if [[ \$mem_total_kb && \$mem_total_kb -gt 0 && \$mem_avail_kb ]]; then
-          mem_used_kb=\$((mem_total_kb - mem_avail_kb))
-          # Simple integer calculation for reliability
-          mem_used_gb=\$(( (mem_used_kb + 512000) / 1024 / 1024 ))  # Round to nearest GB
-          mem_total_gb=\$(( (mem_total_kb + 512000) / 1024 / 1024 ))  # Round to nearest GB
-          mem_percent=\$(( mem_used_kb * 100 / mem_total_kb ))
-          
-          # Ensure we have reasonable values
-          [[ \$mem_used_gb -lt 0 ]] && mem_used_gb=0
-          [[ \$mem_total_gb -lt 1 ]] && mem_total_gb=1
-        fi
+        # Ensure reasonable values
+        [[ \$mem_used_gb -lt 0 ]] && mem_used_gb=0
+        [[ \$mem_total_gb -lt 1 ]] && mem_total_gb=1
       fi` : ''}${config.showLoad ? `
       
       if [[ -r /proc/loadavg ]]; then
@@ -151,33 +153,44 @@ if [[ $sys_cached -eq 0 ]]; then
       fi` : ''}
       ;;
     Darwin*)
-      # macOS - use system commands${config.showCPU ? `
+      # macOS - optimized system commands${config.showCPU ? `
       if command -v top >/dev/null 2>&1; then
+        # Single top call with optimized parsing
         cpu_info=\$(top -l 1 -n 0 | grep "CPU usage" 2>/dev/null)
-        if [[ \$cpu_info =~ ([0-9.]+)%[[:space:]]+user ]]; then
-          user_cpu=\${BASH_REMATCH[1]}
-          if [[ \$cpu_info =~ ([0-9.]+)%[[:space:]]+sys ]]; then
-            sys_cpu=\${BASH_REMATCH[1]}
-            cpu_percent=\$(echo "\$user_cpu + \$sys_cpu" | bc -l 2>/dev/null | cut -d. -f1)
-          fi
+        if [[ \$cpu_info ]]; then
+          # Extract user and sys CPU using awk for better performance
+          cpu_percent=\$(echo "\$cpu_info" | awk '
+            match(\$0, /([0-9.]+)%[[:space:]]+user.*([0-9.]+)%[[:space:]]+sys/, arr) {
+              user = int(arr[1] + 0.5)  # Round to nearest integer
+              sys = int(arr[2] + 0.5)   # Round to nearest integer
+              print user + sys
+            }')
+          # Validate result
+          [[ ! \$cpu_percent =~ ^[0-9]+$ ]] && cpu_percent=0
         fi
       fi` : ''}${config.showRAM ? `
       
+      # Optimized macOS memory detection with single vm_stat call
       if command -v vm_stat >/dev/null 2>&1 && command -v sysctl >/dev/null 2>&1; then
         mem_total_bytes=\$(sysctl -n hw.memsize 2>/dev/null)
-        if [[ \$mem_total_bytes ]]; then
-          mem_total_gb=\$(( mem_total_bytes / 1024 / 1024 / 1024 ))
-          vm_info=\$(vm_stat 2>/dev/null)
-          if [[ \$vm_info ]]; then
-            page_size=4096
-            free_pages=\$(echo "\$vm_info" | grep "Pages free" | awk '{print \$3}' | tr -d '.')
-            inactive_pages=\$(echo "\$vm_info" | grep "Pages inactive" | awk '{print \$3}' | tr -d '.')
-            speculative_pages=\$(echo "\$vm_info" | grep "Pages speculative" | awk '{print \$3}' | tr -d '.')
-            available_bytes=\$(( (free_pages + inactive_pages + speculative_pages) * page_size ))
-            mem_used_bytes=\$(( mem_total_bytes - available_bytes ))
-            mem_used_gb=\$(( mem_used_bytes / 1024 / 1024 / 1024 ))
-            (( mem_total_bytes > 0 )) && mem_percent=\$(( mem_used_bytes * 100 / mem_total_bytes ))
-          fi
+        if [[ \$mem_total_bytes && \$mem_total_bytes -gt 0 ]]; then
+          # Single vm_stat call with awk parsing for efficiency
+          eval "\$(vm_stat 2>/dev/null | awk '
+            /Pages free:/ { free = \$3; gsub(/\\./, "", free) }
+            /Pages inactive:/ { inactive = \$3; gsub(/\\./, "", inactive) }
+            /Pages speculative:/ { spec = \$3; gsub(/\\./, "", spec) }
+            END {
+              if (free && inactive && spec) {
+                page_size = 4096
+                avail_bytes = (free + inactive + spec) * page_size
+                used_bytes = '$mem_total_bytes' - avail_bytes
+                # Integer math with rounding for GB conversion
+                used_gb = int((used_bytes + 536870912) / 1073741824)  # +0.5GB for rounding
+                total_gb = int(('$mem_total_bytes' + 536870912) / 1073741824)
+                percent = int(used_bytes * 100 / '$mem_total_bytes')
+                printf "mem_used_gb=%d;mem_total_gb=%d;mem_percent=%d", used_gb, total_gb, percent
+              }
+            }')"
         fi
       fi` : ''}${config.showLoad ? `
       
@@ -226,6 +239,12 @@ if [[ $sys_cached -eq 0 ]]; then
       ;;
   esac
   
+  # Performance timing completion
+  if [[ \$CC_STATUSLINE_DEBUG && \$sys_start_time ]]; then
+    sys_end_time=\$(date +%s%3N 2>/dev/null || date +%s)
+    sys_duration=\$(( sys_end_time - sys_start_time ))
+  fi
+  
   # Cache the results
   mkdir -p "\${HOME}/.claude" 2>/dev/null
   {
@@ -242,11 +261,12 @@ if [[ $sys_cached -eq 0 ]]; then
   if [[ \$CC_STATUSLINE_DEBUG ]]; then
     {
       echo "[DEBUG] System monitoring at \$(date):"
-      echo "  Platform: \$platform"
+      echo "  Platform: \$platform (cached: \${SYS_PLATFORM:+yes})"
       echo "  CPU: \$cpu_percent%"
       echo "  Memory: \$mem_used_gb GB / \$mem_total_gb GB (\$mem_percent%)"
       echo "  Load: \$load_1min / \$load_5min / \$load_15min"
-      echo "  Raw memory values: total_kb=\$mem_total_kb, avail_kb=\$mem_avail_kb, used_kb=\$mem_used_kb"
+      [[ \$sys_duration ]] && echo "  Collection time: \${sys_duration}ms"
+      echo "  Cache TTL: ${config.refreshRate}s"
     } >> "\${HOME}/.claude/statusline-debug.log" 2>/dev/null
   fi
 fi`
