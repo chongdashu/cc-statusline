@@ -114,12 +114,11 @@ function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageC
   const emojis = config.colors && !config.customEmojis
   const features = new Set(config.features)
 
-  // Priority-based feature ordering (fast features first)
+  // Logical feature ordering (grouped by context)
   const featurePriority = [
-    'directory',  // Fastest - simple variable output
-    'model',      // Fast - simple variable output  
-    'git',        // Medium - requires git command
-    'usage',      // Slowest - requires ccusage integration
+    'directory',  // 1. Where am I?
+    'git',        // 2. What branch/commit?
+    'usage',      // 4. Usage & cost info
     'session',
     'tokens', 
     'burnrate'
@@ -142,10 +141,7 @@ printf '${dirEmoji} %s%s%s' "$(dir_color)" "$current_dir" "$(rst)"`
       case 'model':
         const modelEmoji = emojis ? '🤖' : 'model:'
         displayCode += `
-printf '  ${modelEmoji} %s%s%s' "$(model_color)" "$model_name" "$(rst)"
-if [ -n "$model_version" ] && [ "$model_version" != "null" ]; then
-  printf '  🏷️ %s%s%s' "$(version_color)" "$model_version" "$(rst)"
-fi`
+printf '  ${modelEmoji} %s%s%s' "$(model_color)" "$model_name" "$(rst)"`
         break
 
       case 'git':
