@@ -4,21 +4,22 @@ import { generateGitBashCode, generateGitDisplayCode, generateGitUtilities } fro
 import { generateUsageBashCode, generateUsageDisplayCode, generateUsageUtilities } from '../features/usage.js'
 import { cacheManager, generateFeatureHash } from '../utils/cache-manager.js'
 import { generateOptimizedBashStatusline } from './template-cache.js'
+import { optimizeBashCode, getOptimizationStats } from './bash-optimizer.js'
 
 export function generateBashStatusline(config: StatuslineConfig): string {
   const startTime = Date.now()
   
   // Use the new optimized template cache system first
-  const optimizedScript = generateOptimizedBashStatusline(config)
-  if (optimizedScript) {
+  const cachedScript = generateOptimizedBashStatusline(config)
+  if (cachedScript) {
     // Update performance metrics
     const generationTime = Date.now() - startTime
     cacheManager.updateMetrics({
-      scriptSize: optimizedScript.length,
+      scriptSize: cachedScript.length,
       generationTime,
       featureComplexity: config.features.length
     })
-    return optimizedScript
+    return cachedScript
   }
   
   // Fallback to original template-level caching for edge cases
@@ -32,9 +33,9 @@ export function generateBashStatusline(config: StatuslineConfig): string {
   const templateCacheKey = cacheManager.generateCacheKey('template', templateHash)
   
   // Check memory cache for complete script
-  const cachedScript = cacheManager.getFromMemory<string>(templateCacheKey)
-  if (cachedScript) {
-    return cachedScript
+  const memoryScript = cacheManager.getFromMemory<string>(templateCacheKey)
+  if (memoryScript) {
+    return memoryScript
   }
 
   // Pre-compute feature flags for better performance
@@ -78,18 +79,29 @@ export function generateBashStatusline(config: StatuslineConfig): string {
   ]
 
   // Filter empty parts and join efficiently
-  const generatedScript = parts.filter(Boolean).join('\n') + '\n'
+  const rawScript = parts.filter(Boolean).join('\n') + '\n'
   
-  // Cache the generated script and update performance metrics
+  // Apply final micro-optimizations to the complete script
+  const optimizedScript = optimizeBashCode(rawScript)
+  
+  // Get optimization statistics for performance monitoring
+  const stats = getOptimizationStats(rawScript, optimizedScript)
+  
+  // Cache the optimized script and update performance metrics
   const generationTime = Date.now() - startTime
-  cacheManager.setInMemory(templateCacheKey, generatedScript, 'template', templateHash)
+  cacheManager.setInMemory(templateCacheKey, optimizedScript, 'template', templateHash)
   cacheManager.updateMetrics({
-    scriptSize: generatedScript.length,
+    scriptSize: optimizedScript.length,
     generationTime,
     featureComplexity: config.features.length
   })
   
-  return generatedScript
+  // Log optimization results if in debug mode
+  if (process.env.CC_STATUSLINE_DEBUG === '1') {
+    console.log(`Script optimization: ${stats.reductionPercent}% size reduction (${stats.originalSize} → ${stats.optimizedSize} bytes)`)
+  }
+  
+  return optimizedScript
 }
 
 function generateScriptHeader(config: StatuslineConfig): string {
@@ -122,8 +134,8 @@ function generateBasicDataExtraction(hasDirectory: boolean, hasModel: boolean): 
   const fallbackVars: string[] = []
   
   if (hasDirectory) {
-    jqFields.push('current_dir: (.workspace.current_dir // .cwd // "unknown")')
-    fallbackVars.push('current_dir="unknown"')
+    jqFields.push('cwd: (.workspace.current_dir // .cwd // "unknown")')
+    fallbackVars.push('cwd="unknown"')
   }
   
   if (hasModel) {
@@ -134,24 +146,28 @@ function generateBasicDataExtraction(hasDirectory: boolean, hasModel: boolean): 
 
   const jqQuery = `{${jqFields.join(', ')}}`
   
-  return `
+  const bashCode = `
 # ---- basics ----
 if command -v jq >/dev/null 2>&1; then
   eval "$(echo "$input" | jq -r '${jqQuery} | to_entries | .[] | "\\(.key)=\\(.value | @sh)"' 2>/dev/null)"${hasDirectory ? `
-  current_dir=$(echo "$current_dir" | sed "s|^$HOME|~|g")` : ''}
+  cwd=\${cwd/#$HOME/~}` : ''}
 else
   ${fallbackVars.join('; ')}
 fi
 `
+
+  return optimizeBashCode(bashCode)
 }
 
 function generateLoggingOutput(): string {
-  return `
+  const bashCode = `
 # ---- log extracted data ----
 {
-  echo "[\$TIMESTAMP] Extracted: dir=\${current_dir:-}, model=\${model_name:-}, version=\${model_version:-}, git=\${git_branch:-}, cost=\${cost_usd:-}, cost_ph=\${cost_per_hour:-}, tokens=\${tot_tokens:-}, tpm=\${tpm:-}, session_pct=\${session_pct:-}"
+  echo "[\$TIMESTAMP] Extracted: dir=\${cwd:-}, model=\${model_name:-}, version=\${model_version:-}, git=\${git_branch:-}, cost=\${cost_usd:-}, cost_ph=\${cost_ph:-}, tokens=\${tot_tokens:-}, tpm=\${tpm:-}, pct=\${pct:-}"
 } >> "$LOG_FILE" 2>/dev/null
 `
+
+  return optimizeBashCode(bashCode)
 }
 
 function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageConfig: any): string {
@@ -179,15 +195,15 @@ function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageC
     switch (feature) {
       case 'directory':
         const dirEmoji = emojis ? '📁' : 'dir:'
-        const dirColorPrefix = config.colors ? '$(dir_color)' : ''
+        const dirColorPrefix = config.colors ? '$(dir_clr)' : ''
         const dirColorSuffix = config.colors ? '$(rst)' : ''
         displayCode += `
-printf '${dirEmoji} %s%s%s' "${dirColorPrefix}" "$current_dir" "${dirColorSuffix}"`
+printf '${dirEmoji} %s%s%s' "${dirColorPrefix}" "$cwd" "${dirColorSuffix}"`
         break
 
       case 'model':
         const modelEmoji = emojis ? '🤖' : 'model:'
-        const modelColorPrefix = config.colors ? '$(model_color)' : ''
+        const modelColorPrefix = config.colors ? '$(model_clr)' : ''
         const modelColorSuffix = config.colors ? '$(rst)' : ''
         displayCode += `
 printf '  ${modelEmoji} %s%s%s' "${modelColorPrefix}" "$model_name" "${modelColorSuffix}"`
@@ -209,5 +225,5 @@ printf '  ${modelEmoji} %s%s%s' "${modelColorPrefix}" "$model_name" "${modelColo
     }
   }
 
-  return displayCode
+  return optimizeBashCode(displayCode)
 }
