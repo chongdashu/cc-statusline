@@ -34,7 +34,7 @@ export async function testStatuslineScript(script: string, mockData?: any): Prom
     return {
       success: result.success,
       output: result.output,
-      error: result.error,
+      ...(result.error && { error: result.error }),
       executionTime
     }
     
@@ -48,7 +48,7 @@ export async function testStatuslineScript(script: string, mockData?: any): Prom
   }
 }
 
-export function generateMockClaudeInput(config?: Partial<StatuslineConfig>): any {
+export function generateMockClaudeInput(_config?: Partial<StatuslineConfig>): any {
   return {
     session_id: "test-session-123",
     transcript_path: "/home/user/.claude/conversations/test.jsonl",
@@ -118,10 +118,11 @@ async function executeScript(scriptPath: string, input: string): Promise<{ succe
     })
     
     process.on('close', (code) => {
+      const stderrTrimmed = stderr.trim()
       resolve({
         success: code === 0,
         output: stdout.trim(),
-        error: stderr.trim() || undefined
+        ...(stderrTrimmed && { error: stderrTrimmed })
       })
     })
     
