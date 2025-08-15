@@ -8,6 +8,11 @@ export interface StatuslineConfig {
   ccusageIntegration: boolean
   logging: boolean
   customEmojis: boolean
+  systemMonitoring?: {
+    refreshRate: number
+    cpuThreshold: number
+    memoryThreshold: number
+  }
 }
 
 export async function collectConfiguration(): Promise<StatuslineConfig> {
@@ -22,10 +27,13 @@ export async function collectConfiguration(): Promise<StatuslineConfig> {
         { name: '📁 Working Directory', value: 'directory', checked: true },
         { name: '🌿 Git Branch', value: 'git', checked: true },
         { name: '🤖 Model Name & Version', value: 'model', checked: true },
+        { name: '💻 CPU Usage', value: 'cpu', checked: false },
+        { name: '🧠 RAM Usage', value: 'memory', checked: false },
+        { name: '⚡ System Load', value: 'load', checked: false },
         { name: '💵 Usage & Cost', value: 'usage', checked: true },
         { name: '⌛ Session Time Remaining', value: 'session', checked: true },
         { name: '📊 Token Statistics', value: 'tokens', checked: false },
-        { name: '⚡ Burn Rate (tokens/min)', value: 'burnrate', checked: false }
+        { name: '🔥 Burn Rate (tokens/min)', value: 'burnrate', checked: false }
       ],
       validate: (answer: string[]) => {
         if (answer.length < 1) {
@@ -43,6 +51,8 @@ export async function collectConfiguration(): Promise<StatuslineConfig> {
   ])
 
   // Set intelligent defaults
+  const hasSystemMonitoring = config.features.some((f: string) => ['cpu', 'memory', 'load'].includes(f))
+  
   return {
     features: config.features,
     runtime: 'bash',
@@ -50,7 +60,14 @@ export async function collectConfiguration(): Promise<StatuslineConfig> {
     theme: 'detailed',
     ccusageIntegration: true, // Always enabled since npx works
     logging: false,
-    customEmojis: false
+    customEmojis: false,
+    ...(hasSystemMonitoring && {
+      systemMonitoring: {
+        refreshRate: 3, // 3 second default refresh rate
+        cpuThreshold: 80,
+        memoryThreshold: 85
+      }
+    })
   } as StatuslineConfig
 }
 
@@ -67,6 +84,10 @@ export function displayConfigSummary(config: StatuslineConfig): void {
   
   if (config.logging) {
     console.log('   📝 Debug logging enabled')
+  }
+  
+  if (config.systemMonitoring) {
+    console.log(`   💻 System monitoring enabled (${config.systemMonitoring.refreshRate}s refresh)`)
   }
   
   console.log('')

@@ -2,6 +2,7 @@ import { StatuslineConfig } from '../cli/prompts.js'
 import { generateColorBashCode, generateBasicColors } from '../features/colors.js'
 import { generateGitBashCode, generateGitDisplayCode, generateGitUtilities } from '../features/git.js'
 import { generateUsageBashCode, generateUsageDisplayCode, generateUsageUtilities } from '../features/usage.js'
+import { generateSystemBashCode, generateSystemDisplayCode, generateSystemUtilities } from '../features/system.js'
 import { cacheManager, generateFeatureHash } from '../utils/cache-manager.js'
 import { generateOptimizedBashStatusline } from './template-cache.js'
 import { optimizeBashCode, getOptimizationStats } from './bash-optimizer.js'
@@ -42,6 +43,7 @@ export function generateBashStatusline(config: StatuslineConfig): string {
   const features = new Set(config.features)
   const hasGit = features.has('git')
   const hasUsage = features.has('usage') || features.has('session') || features.has('tokens') || features.has('burnrate')
+  const hasSystem = features.has('cpu') || features.has('memory') || features.has('load')
   const hasDirectory = features.has('directory')
   const hasModel = features.has('model')
 
@@ -62,6 +64,15 @@ export function generateBashStatusline(config: StatuslineConfig): string {
     compactMode: config.theme === 'compact'
   }
 
+  const systemConfig = {
+    enabled: hasSystem,
+    showCPU: features.has('cpu'),
+    showRAM: features.has('memory'),
+    showLoad: features.has('load'),
+    refreshRate: config.systemMonitoring?.refreshRate || 3,
+    displayFormat: config.theme === 'compact' ? 'compact' : 'detailed'
+  }
+
   // Use array for better performance than string concatenation
   const parts: string[] = [
     generateScriptHeader(config),
@@ -71,11 +82,13 @@ export function generateBashStatusline(config: StatuslineConfig): string {
     config.colors ? generateBasicColors() : '',
     hasUsage ? generateUsageUtilities() : '',
     hasGit ? generateGitUtilities() : '',
+    hasSystem ? generateSystemUtilities() : '',
     generateBasicDataExtraction(hasDirectory, hasModel),
     hasGit ? generateGitBashCode(gitConfig, config.colors) : '',
     hasUsage ? generateUsageBashCode(usageConfig, config.colors) : '',
+    hasSystem ? generateSystemBashCode(systemConfig, config.colors) : '',
     config.logging ? generateLoggingOutput() : '',
-    generateDisplaySection(config, gitConfig, usageConfig)
+    generateDisplaySection(config, gitConfig, usageConfig, systemConfig)
   ]
 
   // Filter empty parts and join efficiently
@@ -170,7 +183,7 @@ function generateLoggingOutput(): string {
   return optimizeBashCode(bashCode)
 }
 
-function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageConfig: any): string {
+function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageConfig: any, systemConfig: any): string {
   const emojis = config.colors && !config.customEmojis
   const features = new Set(config.features)
 
@@ -179,7 +192,10 @@ function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageC
     'directory',  // 1. Where am I?
     'git',        // 2. What branch/commit?
     'model',      // 3. What model am I using?
-    'usage',      // 4. Usage & cost info
+    'cpu',        // 4. System performance
+    'memory',
+    'load',
+    'usage',      // 5. Usage & cost info
     'session',
     'tokens', 
     'burnrate'
@@ -211,6 +227,15 @@ printf '  ${modelEmoji} %s%s%s' "${modelColorPrefix}" "$model_name" "${modelColo
 
       case 'git':
         displayCode += generateGitDisplayCode(gitConfig, config.colors, emojis)
+        break
+
+      case 'cpu':
+      case 'memory':
+      case 'load':
+        // Only add system display once
+        if (feature === 'cpu' || (!features.has('cpu') && feature === 'memory') || (!features.has('cpu') && !features.has('memory') && feature === 'load')) {
+          displayCode += generateSystemDisplayCode(systemConfig, emojis)
+        }
         break
 
       case 'usage':

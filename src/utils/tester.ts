@@ -100,6 +100,19 @@ export function generateMockCcusageOutput(): any {
   }
 }
 
+export function generateMockSystemData(): any {
+  return {
+    cpu_percent: 45.2,
+    memory_used_gb: 8,
+    memory_total_gb: 16,
+    memory_percent: 50.0,
+    load_1min: 1.25,
+    load_5min: 1.15,
+    load_15min: 0.98,
+    platform: "Linux"
+  }
+}
+
 async function executeScript(scriptPath: string, input: string): Promise<{ success: boolean, output: string, error?: string }> {
   return new Promise((resolve) => {
     const process = spawn('bash', [scriptPath], {
@@ -189,6 +202,22 @@ export function analyzeTestResult(result: TestResult, config: StatuslineConfig):
   if (config.features.includes('git') && config.ccusageIntegration && !result.output.includes('git')) {
     suggestions.push('Git integration may require actual git repository')
   }
+
+  // System monitoring validation
+  if (config.features.includes('cpu') && !result.output.includes('💻') && !result.output.includes('cpu:')) {
+    hasRequiredFeatures = false
+    issues.push('CPU monitoring feature not working properly')
+  }
+
+  if (config.features.includes('memory') && !result.output.includes('🧠') && !result.output.includes('ram:')) {
+    hasRequiredFeatures = false
+    issues.push('Memory monitoring feature not working properly')
+  }
+
+  if (config.features.includes('load') && !result.output.includes('⚡') && !result.output.includes('load:')) {
+    hasRequiredFeatures = false
+    issues.push('System load feature not working properly')
+  }
   
   // Error analysis
   if (result.error) {
@@ -206,6 +235,15 @@ export function analyzeTestResult(result: TestResult, config: StatuslineConfig):
   
   if (config.ccusageIntegration && result.executionTime > 200) {
     suggestions.push('ccusage integration may slow down statusline - consider caching')
+  }
+
+  // System monitoring performance suggestions
+  if (config.systemMonitoring && result.executionTime > 300) {
+    suggestions.push('System monitoring may impact performance - consider increasing refresh rate')
+  }
+
+  if (config.features.some(f => ['cpu', 'memory', 'load'].includes(f)) && !config.systemMonitoring) {
+    suggestions.push('System monitoring features detected but configuration missing')
   }
   
   return {
