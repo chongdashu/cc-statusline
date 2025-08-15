@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
 
 export interface CacheKey {
-  type: 'ccusage' | 'git' | 'template' | 'template_fragment' | 'template_combination'
+  type: 'ccusage' | 'git' | 'system' | 'template' | 'template_fragment' | 'template_combination'
   context: string  // pwd hash for git, features hash for template
   timestamp: number
 }
@@ -106,36 +106,174 @@ export class CacheManager {
   }
 
   /**
-   * Generate bash code for file-level caching (integrates with current patterns)
+   * Generate bash code for file-level caching with reliability improvements (Phase 4)
    */
-  generateFileCacheCode(type: 'ccusage' | 'git', command: string): string {
+  generateFileCacheCode(type: 'ccusage' | 'git' | 'system', command: string): string {
     const cacheFile = type === 'ccusage' 
       ? '${HOME}/.claude/ccusage_cache.json'
+      : type === 'system'
+      ? '${HOME}/.claude/system_cache_${PWD//\\//_}.tmp'
       : '${HOME}/.claude/git_cache_${PWD//\\//_}.tmp'
     
-    const ttl = type === 'ccusage' ? 30 : 10  // Different TTLs per cache type
+    const ttl = type === 'ccusage' ? 30 : type === 'system' ? 15 : 10  // Different TTLs per cache type
     
     return `
-# ${type} cache (${ttl}s TTL)
+# ${type} cache with reliability improvements (${ttl}s TTL)
 cache_file="${cacheFile}"
 cache_ttl=${ttl}
 use_cache=0
+cache_valid=0
 
-if [ -f "$cache_file" ]; then
-  cache_age=$(($(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0)))
-  if [ $cache_age -lt $cache_ttl ]; then
-    use_cache=1
-    cached_result=$(cat "$cache_file" 2>/dev/null)
+# Phase 4: Enhanced cache validation and corruption detection
+validate_cache_integrity() {
+  local file="\$1"
+  local cache_type="\$2"
+  
+  # Basic file checks
+  if [[ ! -f "\$file" ]]; then
+    [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Cache file does not exist: \$file" >&2
+    return 1
+  fi
+  
+  # Size check - cache files should not be empty or suspiciously large
+  local file_size=\$(stat -c %s "\$file" 2>/dev/null || stat -f %z "\$file" 2>/dev/null || echo 0)
+  if (( file_size == 0 )); then
+    [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Cache file is empty: \$file" >&2
+    return 1
+  elif (( file_size > 100000 )); then
+    [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Cache file suspiciously large (\${file_size} bytes): \$file" >&2
+    return 1
+  fi
+  
+  # Content validation based on cache type
+  case "\$cache_type" in
+    ccusage)
+      # Validate JSON structure for ccusage cache
+      if command -v jq >/dev/null 2>&1; then
+        if ! jq empty "\$file" 2>/dev/null; then
+          [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Invalid JSON in ccusage cache: \$file" >&2
+          return 1
+        fi
+      else
+        # Fallback validation - check for basic JSON structure
+        if ! grep -q "^{.*}$" "\$file" 2>/dev/null; then
+          [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] ccusage cache doesn't look like JSON: \$file" >&2
+          return 1
+        fi
+      fi
+      ;;
+    git|system)
+      # Validate key=value format for git/system cache
+      if ! grep -q "=" "\$file" 2>/dev/null; then
+        [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] \$cache_type cache missing key=value pairs: \$file" >&2
+        return 1
+      fi
+      
+      # Check for shell injection attempts (basic security)
+      if grep -q "\\\$(\\|\\;&\\|\\|&\\||\\||)" "\$file" 2>/dev/null; then
+        [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Potential shell injection in cache: \$file" >&2
+        return 1
+      fi
+      ;;
+  esac
+  
+  return 0
+}
+
+repair_cache_file() {
+  local file="\$1"
+  local cache_type="\$2"
+  
+  [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Attempting to repair cache file: \$file" >&2
+  
+  # Create backup of corrupted cache
+  if [[ -f "\$file" ]]; then
+    cp "\$file" "\${file}.corrupted.\$(date +%s)" 2>/dev/null
+    [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Backed up corrupted cache to \${file}.corrupted.*" >&2
+  fi
+  
+  # Remove corrupted cache to force fresh generation
+  rm -f "\$file" 2>/dev/null
+  
+  return 0
+}
+
+if [[ -f "\$cache_file" ]]; then
+  cache_age=\$((\${EPOCHSECONDS:-\$(date +%s)} - \$(stat -c %Y "\$cache_file" 2>/dev/null || stat -f %m "\$cache_file" 2>/dev/null || echo 0)))
+  
+  if (( cache_age < cache_ttl )); then
+    # Validate cache integrity before using
+    if validate_cache_integrity "\$cache_file" "${type}"; then
+      use_cache=1
+      cache_valid=1
+      cached_result=\$(cat "\$cache_file" 2>/dev/null)
+      [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Using valid ${type} cache (age: \${cache_age}s)" >&2
+    else
+      [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Cache integrity check failed for ${type} cache" >&2
+      repair_cache_file "\$cache_file" "${type}"
+    fi
+  else
+    [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] ${type} cache expired (age: \${cache_age}s, TTL: ${ttl}s)" >&2
+    # Clean up expired cache
+    rm -f "\$cache_file" 2>/dev/null
   fi
 fi
 
-if [ $use_cache -eq 0 ]; then
-  # Execute command and cache result
-  fresh_result=$(${command})
-  if [ -n "$fresh_result" ]; then
-    mkdir -p "$(dirname "$cache_file")" 2>/dev/null
-    echo "$fresh_result" > "$cache_file" 2>/dev/null
-    cached_result="$fresh_result"
+if [[ \$use_cache -eq 0 ]]; then
+  # Execute command and cache result with error handling
+  [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Generating fresh ${type} data" >&2
+  
+  # Execute command with timeout protection
+  if command -v timeout >/dev/null 2>&1; then
+    fresh_result=\$(timeout 10s ${command} 2>/dev/null)
+    cmd_exit_code=\$?
+  else
+    fresh_result=\$(${command} 2>/dev/null)
+    cmd_exit_code=\$?
+  fi
+  
+  # Validate command output before caching
+  if [[ \$cmd_exit_code -eq 0 ]] && [[ -n "\$fresh_result" ]]; then
+    # Additional validation for specific cache types
+    case "${type}" in
+      ccusage)
+        if [[ "\$fresh_result" =~ ^\\{.*\\}$ ]]; then
+          # Write to cache with atomic operation (write to temp file, then move)
+          mkdir -p "\$(dirname "\$cache_file")" 2>/dev/null
+          temp_cache="\${cache_file}.tmp.\$\$"
+          if echo "\$fresh_result" > "\$temp_cache" 2>/dev/null; then
+            mv "\$temp_cache" "\$cache_file" 2>/dev/null
+            cached_result="\$fresh_result"
+            [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Cached fresh ccusage data" >&2
+          else
+            rm -f "\$temp_cache" 2>/dev/null
+          fi
+        else
+          [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] ccusage output doesn't look like JSON, not caching" >&2
+          cached_result="\$fresh_result"
+        fi
+        ;;
+      git|system)
+        if [[ "\$fresh_result" =~ = ]]; then
+          # Write to cache with atomic operation
+          mkdir -p "\$(dirname "\$cache_file")" 2>/dev/null
+          temp_cache="\${cache_file}.tmp.\$\$"
+          if echo "\$fresh_result" > "\$temp_cache" 2>/dev/null; then
+            mv "\$temp_cache" "\$cache_file" 2>/dev/null
+            cached_result="\$fresh_result"
+            [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Cached fresh ${type} data" >&2
+          else
+            rm -f "\$temp_cache" 2>/dev/null
+          fi
+        else
+          [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] ${type} output doesn't contain key=value pairs, not caching" >&2
+          cached_result="\$fresh_result"
+        fi
+        ;;
+    esac
+  else
+    [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Command failed or returned empty result for ${type}" >&2
+    cached_result=""
   fi
 fi`
   }
@@ -169,22 +307,91 @@ fi`
   }
 
   /**
-   * Generate bash code for cache directory initialization
+   * Generate bash code for cache directory initialization with enhanced reliability (Phase 4)
    */
   generateCacheInitCode(): string {
     return `
-# Initialize cache directory
-mkdir -p "\${HOME}/.claude" 2>/dev/null
-
-# Cleanup old cache files (run occasionally to prevent accumulation)
-if [ "\$((\$(date +%s) % 100))" -eq 0 ]; then
-  cleanup_cache() {
-    if [ -d "\${HOME}/.claude" ]; then
-      find "\${HOME}/.claude" -name "*_cache_*.tmp" -mmin +60 -delete 2>/dev/null
-      find "\${HOME}/.claude" -name "ccusage_cache.json" -mmin +120 -delete 2>/dev/null
+# Initialize cache directory with enhanced reliability
+init_cache_directory() {
+  local cache_dir="\${HOME}/.claude"
+  
+  # Create cache directory with proper permissions
+  if ! mkdir -p "\$cache_dir" 2>/dev/null; then
+    [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Failed to create cache directory: \$cache_dir" >&2
+    return 1
+  fi
+  
+  # Verify directory is writable
+  if ! touch "\$cache_dir/.write_test" 2>/dev/null; then
+    [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Cache directory not writable: \$cache_dir" >&2
+    return 1
+  else
+    rm -f "\$cache_dir/.write_test" 2>/dev/null
+  fi
+  
+  # Check disk space (warn if less than 10MB available)
+  if command -v df >/dev/null 2>&1; then
+    local available_kb=\$(df "\$cache_dir" 2>/dev/null | awk 'NR==2 {print \$4}' 2>/dev/null || echo "999999")
+    if (( available_kb < 10240 )); then  # Less than 10MB
+      [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Low disk space for cache: \${available_kb}KB available" >&2
     fi
-  }
-  cleanup_cache
+  fi
+  
+  return 0
+}
+
+# Enhanced cache cleanup with corruption detection and repair
+cleanup_cache_files() {
+  local cache_dir="\${HOME}/.claude"
+  [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Running cache cleanup" >&2
+  
+  if [[ ! -d "\$cache_dir" ]]; then
+    return 0
+  fi
+  
+  # Clean up old cache files
+  if command -v find >/dev/null 2>&1; then
+    # Remove cache files older than 2 hours
+    find "\$cache_dir" -name "*_cache_*.tmp" -mmin +120 -delete 2>/dev/null
+    find "\$cache_dir" -name "ccusage_cache.json" -mmin +180 -delete 2>/dev/null
+    find "\$cache_dir" -name "system_cache_*.tmp" -mmin +60 -delete 2>/dev/null
+    
+    # Clean up corruption backups older than 24 hours
+    find "\$cache_dir" -name "*.corrupted.*" -mmin +1440 -delete 2>/dev/null
+    
+    # Clean up temp files from interrupted operations
+    find "\$cache_dir" -name "*.tmp.*" -mmin +10 -delete 2>/dev/null
+    
+    [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Cache cleanup completed" >&2
+  fi
+  
+  # Validate remaining cache files for corruption
+  local cache_files=("\$cache_dir"/*.json "\$cache_dir"/*.tmp)
+  for cache_file in "\${cache_files[@]}"; do
+    if [[ -f "\$cache_file" ]] && [[ "\$cache_file" != *"corrupted"* ]]; then
+      # Determine cache type from filename
+      local cache_type="git"
+      if [[ "\$cache_file" == *"ccusage"* ]]; then
+        cache_type="ccusage"
+      elif [[ "\$cache_file" == *"system"* ]]; then
+        cache_type="system"
+      fi
+      
+      # Validate integrity and remove if corrupted
+      if ! validate_cache_integrity "\$cache_file" "\$cache_type" 2>/dev/null; then
+        [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Removing corrupted cache file: \$cache_file" >&2
+        repair_cache_file "\$cache_file" "\$cache_type"
+      fi
+    fi
+  done
+}
+
+# Initialize cache directory
+init_cache_directory
+
+# Run cleanup occasionally (1% chance each time, or when debug is enabled)
+if [[ \$CC_STATUSLINE_DEBUG ]] || [[ "\$((\$(date +%s) % 100))" -eq 0 ]]; then
+  cleanup_cache_files
 fi`
   }
 

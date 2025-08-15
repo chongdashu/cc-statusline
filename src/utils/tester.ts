@@ -100,7 +100,7 @@ export function generateMockCcusageOutput(): any {
   }
 }
 
-export function generateMockSystemData(platform?: 'Linux' | 'WSL' | 'Darwin' | 'Windows', scenario?: 'low' | 'normal' | 'high' | 'trending_up' | 'trending_down'): any {
+export function generateMockSystemData(platform?: 'Linux' | 'WSL' | 'Darwin' | 'Windows', scenario?: 'low' | 'normal' | 'high' | 'trending_up' | 'trending_down' | 'stress' | 'edge_case' | 'invalid_data'): any {
   let baseData: any
   
   // Generate different scenarios to test Phase 3 features
@@ -151,6 +151,48 @@ export function generateMockSystemData(platform?: 'Linux' | 'WSL' | 'Darwin' | '
         load_1min: 0.8,
         load_5min: 1.3,
         load_15min: 1.8,
+      }
+      break
+    case 'stress':
+      // Extreme stress test scenario - maximum reasonable values
+      baseData = {
+        cpu_percent: 99,
+        memory_used_gb: 63,
+        memory_total_gb: 64,
+        memory_percent: 98.4,
+        load_1min: 15.75,
+        load_5min: 14.20,
+        load_15min: 12.80,
+        cpu_cores: 16
+      }
+      break
+    case 'edge_case':
+      // Edge case scenario - boundary values and unusual conditions
+      baseData = {
+        cpu_percent: 0,
+        memory_used_gb: 0,
+        memory_total_gb: 1,
+        memory_percent: 0,
+        load_1min: 0.00,
+        load_5min: 0.00,
+        load_15min: 0.00,
+        // Test very small memory system
+        memory_total_mb: 512,
+        memory_used_mb: 0
+      }
+      break
+    case 'invalid_data':
+      // Invalid/corrupted data scenario - tests validation framework
+      baseData = {
+        cpu_percent: -5, // Invalid negative CPU
+        memory_used_gb: 200, // Used > total (impossible)
+        memory_total_gb: 16,
+        memory_percent: 1250, // Invalid percentage > 100
+        load_1min: -1.5, // Invalid negative load
+        load_5min: "invalid", // Non-numeric string
+        load_15min: 999.99, // Extremely high load
+        // Missing critical fields to test fallbacks
+        platform: "UnknownOS"
       }
       break
     default:
@@ -231,6 +273,289 @@ export function generateMockWSLSystemData(): any {
 
 export function generateMockMacOSSystemData(): any {
   return generateMockSystemData('Darwin')
+}
+
+/**
+ * Phase 4 Reliability Testing: Comprehensive stress testing suite
+ */
+export interface StressTestConfig {
+  platforms: Array<'Linux' | 'WSL' | 'Darwin' | 'Windows'>
+  scenarios: Array<'low' | 'normal' | 'high' | 'trending_up' | 'trending_down' | 'stress' | 'edge_case' | 'invalid_data'>
+  includeCorruptedData: boolean
+  includeMissingTools: boolean
+  includePermissionErrors: boolean
+  timeoutScenarios: boolean
+}
+
+export async function runStressTests(script: string, config: StressTestConfig): Promise<StressTestResults> {
+  const results: StressTestResults = {
+    totalTests: 0,
+    passed: 0,
+    failed: 0,
+    warnings: 0,
+    testResults: [],
+    performanceStats: {
+      averageExecutionTime: 0,
+      maxExecutionTime: 0,
+      minExecutionTime: Infinity,
+      timeouts: 0
+    },
+    reliabilityStats: {
+      validationErrorsHandled: 0,
+      gracefulDegradations: 0,
+      completeFailures: 0
+    }
+  }
+
+  const allTests: Array<{ platform: string, scenario: string, mockData: any }> = []
+
+  // Generate all test combinations
+  for (const platform of config.platforms) {
+    for (const scenario of config.scenarios) {
+      allTests.push({
+        platform,
+        scenario,
+        mockData: generateMockSystemData(platform, scenario)
+      })
+    }
+  }
+
+  // Add corrupted data tests
+  if (config.includeCorruptedData) {
+    allTests.push(
+      { platform: 'Linux', scenario: 'corrupted_json', mockData: generateCorruptedInputData() },
+      { platform: 'WSL', scenario: 'malformed_data', mockData: generateMalformedSystemData() },
+      { platform: 'Darwin', scenario: 'empty_data', mockData: {} }
+    )
+  }
+
+  // Add missing tools simulation
+  if (config.includeMissingTools) {
+    allTests.push(
+      { platform: 'Linux', scenario: 'no_vmstat', mockData: generateMockSystemData('Linux', 'normal') },
+      { platform: 'Darwin', scenario: 'no_sysctl', mockData: generateMockSystemData('Darwin', 'normal') }
+    )
+  }
+
+  results.totalTests = allTests.length
+
+  // Execute all tests
+  for (const test of allTests) {
+    try {
+      let testScript = script
+      
+      // Simulate missing tools by modifying script
+      if (test.scenario.includes('no_')) {
+        testScript = simulateMissingTools(script, test.scenario)
+      }
+
+      const testResult = await testStatuslineScript(testScript, test.mockData)
+      
+      // Analyze result
+      const analysis = analyzeStressTestResult(testResult, test.platform, test.scenario)
+      
+      results.testResults.push({
+        platform: test.platform,
+        scenario: test.scenario,
+        result: testResult,
+        analysis
+      })
+
+      // Update stats
+      if (analysis.passed) {
+        results.passed++
+      } else {
+        results.failed++
+      }
+
+      if (analysis.hasWarnings) {
+        results.warnings++
+      }
+
+      // Performance stats
+      results.performanceStats.averageExecutionTime += testResult.executionTime
+      results.performanceStats.maxExecutionTime = Math.max(results.performanceStats.maxExecutionTime, testResult.executionTime)
+      results.performanceStats.minExecutionTime = Math.min(results.performanceStats.minExecutionTime, testResult.executionTime)
+
+      if (testResult.executionTime > 5000) {
+        results.performanceStats.timeouts++
+      }
+
+      // Reliability stats
+      if (analysis.validationErrorHandled) {
+        results.reliabilityStats.validationErrorsHandled++
+      }
+      if (analysis.gracefulDegradation) {
+        results.reliabilityStats.gracefulDegradations++
+      }
+      if (!testResult.success && !analysis.gracefulDegradation) {
+        results.reliabilityStats.completeFailures++
+      }
+
+    } catch (error) {
+      results.failed++
+      results.reliabilityStats.completeFailures++
+      results.testResults.push({
+        platform: test.platform,
+        scenario: test.scenario,
+        result: {
+          success: false,
+          output: '',
+          error: error instanceof Error ? error.message : String(error),
+          executionTime: 0
+        },
+        analysis: {
+          passed: false,
+          hasWarnings: true,
+          validationErrorHandled: false,
+          gracefulDegradation: false,
+          issues: [`Test execution failed: ${error instanceof Error ? error.message : String(error)}`]
+        }
+      })
+    }
+  }
+
+  // Finalize performance stats
+  results.performanceStats.averageExecutionTime /= results.totalTests
+
+  return results
+}
+
+export interface StressTestResults {
+  totalTests: number
+  passed: number
+  failed: number
+  warnings: number
+  testResults: Array<{
+    platform: string
+    scenario: string
+    result: TestResult
+    analysis: StressTestAnalysis
+  }>
+  performanceStats: {
+    averageExecutionTime: number
+    maxExecutionTime: number
+    minExecutionTime: number
+    timeouts: number
+  }
+  reliabilityStats: {
+    validationErrorsHandled: number
+    gracefulDegradations: number
+    completeFailures: number
+  }
+}
+
+export interface StressTestAnalysis {
+  passed: boolean
+  hasWarnings: boolean
+  validationErrorHandled: boolean
+  gracefulDegradation: boolean
+  issues: string[]
+}
+
+function analyzeStressTestResult(result: TestResult, platform: string, scenario: string): StressTestAnalysis {
+  const analysis: StressTestAnalysis = {
+    passed: result.success,
+    hasWarnings: false,
+    validationErrorHandled: false,
+    gracefulDegradation: false,
+    issues: []
+  }
+
+  // Check for validation error handling
+  if (scenario === 'invalid_data') {
+    if (result.success && !result.output.includes('error')) {
+      analysis.validationErrorHandled = true
+    } else if (result.success) {
+      analysis.gracefulDegradation = true
+      analysis.hasWarnings = true
+      analysis.issues.push('Invalid data scenario should handle validation gracefully')
+    }
+  }
+
+  // Check for stress test handling
+  if (scenario === 'stress') {
+    if (result.executionTime > 1000) {
+      analysis.hasWarnings = true
+      analysis.issues.push(`Stress test execution time too high: ${result.executionTime}ms`)
+    }
+    if (result.success && result.output.includes('99%')) {
+      analysis.passed = true
+    }
+  }
+
+  // Check for edge case handling
+  if (scenario === 'edge_case') {
+    if (result.success && (result.output.includes('0%') || result.output.includes('0G'))) {
+      analysis.gracefulDegradation = true
+    }
+  }
+
+  // Platform-specific checks
+  if (platform === 'WSL' && result.output.includes('WSL')) {
+    analysis.passed = true
+  }
+
+  // Check for timeout handling
+  if (result.executionTime > 5000) {
+    analysis.hasWarnings = true
+    analysis.issues.push('Test execution timed out or took too long')
+  }
+
+  // Check error handling
+  if (result.error && result.error.includes('validation')) {
+    analysis.validationErrorHandled = true
+  }
+
+  return analysis
+}
+
+function generateCorruptedInputData(): any {
+  return {
+    "invalid": "json",
+    "nested": {
+      "broken": null,
+      "array": [1, "mixed", { "types": true }]
+    },
+    "circular_ref": null // Simulates circular reference issue
+  }
+}
+
+function generateMalformedSystemData(): any {
+  return {
+    cpu_percent: "not_a_number",
+    memory_used_gb: {},
+    memory_total_gb: [],
+    memory_percent: true,
+    load_1min: undefined,
+    load_5min: null,
+    load_15min: Symbol('invalid')
+  }
+}
+
+function simulateMissingTools(script: string, scenario: string): string {
+  let modifiedScript = script
+
+  switch (scenario) {
+    case 'no_vmstat':
+      // Replace vmstat commands with false to simulate missing tool
+      modifiedScript = modifiedScript.replace(/command -v vmstat/g, 'false # vmstat not available')
+      break
+    case 'no_sysctl':
+      // Replace sysctl commands with false
+      modifiedScript = modifiedScript.replace(/command -v sysctl/g, 'false # sysctl not available')
+      break
+    case 'no_top':
+      // Replace top commands with false
+      modifiedScript = modifiedScript.replace(/command -v top/g, 'false # top not available')
+      break
+    case 'no_free':
+      // Replace free commands with false
+      modifiedScript = modifiedScript.replace(/command -v free/g, 'false # free not available')
+      break
+  }
+
+  return modifiedScript
 }
 
 async function executeScript(scriptPath: string, input: string): Promise<{ success: boolean, output: string, error?: string }> {

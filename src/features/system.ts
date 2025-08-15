@@ -70,6 +70,99 @@ sys_clr() { :; }
 cpu_percent=0 mem_used_gb=0 mem_total_gb=0 mem_percent=0
 load_1min=0 load_5min=0 load_15min=0
 
+# ---- input validation framework (Phase 4) ----
+validate_numeric() {
+  local val="\$1"
+  local min="\${2:-0}"
+  local max="\${3:-999999}"
+  local default="\${4:-0}"
+  
+  # Check if value is numeric and within bounds
+  if [[ \$val =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    # Convert to integer for comparison (multiply by 100 for decimal precision)
+    local val_int=\$(echo "\$val * 100" | bc -l 2>/dev/null | cut -d. -f1 2>/dev/null || echo "0")
+    local min_int=\$(echo "\$min * 100" | bc -l 2>/dev/null | cut -d. -f1 2>/dev/null || echo "0")
+    local max_int=\$(echo "\$max * 100" | bc -l 2>/dev/null | cut -d. -f1 2>/dev/null || echo "99999900")
+    
+    if (( val_int >= min_int && val_int <= max_int )); then
+      echo "\$val"
+    else
+      [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Value \$val out of bounds [\$min-\$max], using \$default" >&2
+      echo "\$default"
+    fi
+  else
+    [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Invalid numeric value '\$val', using \$default" >&2
+    echo "\$default"
+  fi
+}
+
+validate_cpu_percent() {
+  validate_numeric "\$1" "0" "100" "0"
+}
+
+validate_memory_gb() {
+  local val="\$1"
+  local max_reasonable="\${2:-1024}"  # 1TB max reasonable
+  validate_numeric "\$val" "0" "\$max_reasonable" "0"
+}
+
+validate_memory_percent() {
+  validate_numeric "\$1" "0" "100" "0"
+}
+
+validate_load_average() {
+  local val="\$1"
+  local max_load="\${2:-50}"  # 50 max reasonable load
+  validate_numeric "\$val" "0" "\$max_load" "0"
+}
+
+validate_platform() {
+  local platform="\$1"
+  case "\$platform" in
+    Linux*|WSL*|Darwin*|FreeBSD*|OpenBSD*|NetBSD*|SunOS*|CYGWIN*|MINGW*)
+      echo "\$platform"
+      ;;
+    *)
+      [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Unknown platform '\$platform', using 'Unknown'" >&2
+      echo "Unknown"
+      ;;
+  esac
+}
+
+# Enhanced bounds checking for system values
+apply_cpu_bounds() {
+  local cpu="\$(validate_cpu_percent "\$1")"
+  # Additional sanity checks
+  if [[ \$cpu == "0" ]] && [[ -n \$1 ]] && [[ \$1 != "0" ]]; then
+    # If validation returned 0 but input wasn't 0, there was an error
+    [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] CPU validation failed for input '\$1'" >&2
+  fi
+  echo "\$cpu"
+}
+
+apply_memory_bounds() {
+  local used="\$(validate_memory_gb "\$1")"
+  local total="\$(validate_memory_gb "\$2")"
+  
+  # Ensure used <= total
+  if [[ \$total != "0" ]] && (( \$(echo "\$used > \$total" | bc -l 2>/dev/null || echo 0) )); then
+    [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Memory used (\$used GB) > total (\$total GB), capping used to total" >&2
+    used="\$total"
+  fi
+  
+  echo "\$used \$total"
+}
+
+apply_load_bounds() {
+  local load1="\$(validate_load_average "\$1")"
+  local load5="\$(validate_load_average "\$2" "50")"
+  local load15="\$(validate_load_average "\$3" "50")"
+  
+  # Logical validation: load averages should generally decrease over time intervals
+  # but this isn't always true, so just validate individual values
+  echo "\$load1 \$load5 \$load15"
+}
+
 # System metrics cache (TTL: ${config.refreshRate} seconds)
 sys_cache="\${HOME}/.claude/system_\${PWD//\\//_}.tmp"
 sys_ttl=${config.refreshRate}
@@ -93,19 +186,27 @@ if [[ $sys_cached -eq 0 ]]; then
   
   # Cache platform detection to avoid repeated uname calls
   if [[ -z \$SYS_PLATFORM ]]; then
-    SYS_PLATFORM="\$(uname -s 2>/dev/null)"
-    # WSL detection for enhanced performance
-    if [[ \$SYS_PLATFORM == "Linux" ]] && [[ -r /proc/version ]] && grep -qi "microsoft" /proc/version 2>/dev/null; then
-      SYS_PLATFORM="WSL"
-      # Cache WSL version for optimizations
-      if grep -qi "wsl2" /proc/version 2>/dev/null; then
-        export SYS_WSL_VERSION="2"
-      else
-        export SYS_WSL_VERSION="1"
+    raw_platform="\$(uname -s 2>/dev/null)"
+    if [[ \$raw_platform ]]; then
+      SYS_PLATFORM="\$(validate_platform "\$raw_platform")"
+      # WSL detection for enhanced performance
+      if [[ \$SYS_PLATFORM == "Linux" ]] && [[ -r /proc/version ]] && grep -qi "microsoft" /proc/version 2>/dev/null; then
+        SYS_PLATFORM="WSL"
+        # Cache WSL version for optimizations
+        if grep -qi "wsl2" /proc/version 2>/dev/null; then
+          export SYS_WSL_VERSION="2"
+        else
+          export SYS_WSL_VERSION="1"
+        fi
+        [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Detected WSL version: \$SYS_WSL_VERSION" >&2
       fi
+      # Cache platform in user session for reuse
+      export SYS_PLATFORM
+      [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Platform detected: \$SYS_PLATFORM (raw: \$raw_platform)" >&2
+    else
+      SYS_PLATFORM="Unknown"
+      [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Platform detection failed, using Unknown" >&2
     fi
-    # Cache platform in user session for reuse
-    export SYS_PLATFORM
   fi
   platform="\$SYS_PLATFORM"
   
@@ -130,11 +231,14 @@ if [[ $sys_cached -eq 0 ]]; then
             total=\$((active + idle + iowait))
             
             if (( total > 0 )); then
-              cpu_percent=\$(( active * 100 / total ))
-              # Bounds checking for sanity
-              (( cpu_percent > 100 )) && cpu_percent=100
-              (( cpu_percent < 0 )) && cpu_percent=0
-              linux_cpu_detected=1
+              raw_cpu_percent=\$(( active * 100 / total ))
+              cpu_percent=\$(apply_cpu_bounds "\$raw_cpu_percent")
+              if [[ \$cpu_percent != "0" ]] || [[ \$raw_cpu_percent == "0" ]]; then
+                linux_cpu_detected=1
+                [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] /proc/stat CPU: \$cpu_percent% (raw: \$raw_cpu_percent%)" >&2
+              else
+                [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] /proc/stat CPU validation failed, trying fallback" >&2
+              fi
             fi
           fi
         fi
@@ -142,31 +246,46 @@ if [[ $sys_cached -eq 0 ]]; then
       
       # Fallback 1: vmstat method for systems where /proc/stat is unreliable
       if [[ \$linux_cpu_detected -eq 0 ]] && command -v vmstat >/dev/null 2>&1; then
-        vmstat_output=\$(vmstat 1 2 2>/dev/null | tail -1)
+        [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Trying vmstat CPU detection" >&2
+        vmstat_output=\$(timeout 3s vmstat 1 2 2>/dev/null | tail -1)
         if [[ \$vmstat_output ]]; then
           cpu_idle=\$(echo "\$vmstat_output" | awk '{print \$15}' 2>/dev/null)
-          if [[ \$cpu_idle =~ ^[0-9]+$ ]] && (( cpu_idle >= 0 && cpu_idle <= 100 )); then
-            cpu_percent=\$((100 - cpu_idle))
+          validated_idle=\$(validate_cpu_percent "\$cpu_idle")
+          if [[ \$validated_idle != "0" ]] || [[ \$cpu_idle == "0" ]]; then
+            raw_cpu_percent=\$((100 - validated_idle))
+            cpu_percent=\$(apply_cpu_bounds "\$raw_cpu_percent")
             linux_cpu_detected=1
+            [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] vmstat CPU: \$cpu_percent% (idle: \$validated_idle%)" >&2
+          else
+            [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] vmstat CPU idle validation failed: '\$cpu_idle'" >&2
           fi
+        else
+          [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] vmstat command failed or timed out" >&2
         fi
       fi
       
       # Fallback 2: top command for older systems
       if [[ \$linux_cpu_detected -eq 0 ]] && command -v top >/dev/null 2>&1; then
-        cpu_line=\$(top -bn1 | grep "^%Cpu" 2>/dev/null | head -1)
+        [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Trying top CPU detection" >&2
+        cpu_line=\$(timeout 5s top -bn1 2>/dev/null | grep "^%Cpu" | head -1)
         if [[ \$cpu_line ]]; then
           # Parse top CPU line (format varies by version)
-          cpu_percent=\$(echo "\$cpu_line" | awk '{
+          raw_cpu_percent=\$(echo "\$cpu_line" | awk '{
             # Look for patterns like: %Cpu(s):  5.2%us,  1.0%sy
             if (match(\$0, /([0-9.]+)%[[:space:]]*us.*([0-9.]+)%[[:space:]]*sy/, arr)) {
               user_pct = arr[1]; sys_pct = arr[2]
               print int(user_pct + sys_pct + 0.5)  # Round to nearest int
             }
           }' 2>/dev/null)
-          if [[ \$cpu_percent =~ ^[0-9]+$ ]] && (( cpu_percent >= 0 && cpu_percent <= 100 )); then
+          cpu_percent=\$(apply_cpu_bounds "\$raw_cpu_percent")
+          if [[ \$cpu_percent != "0" ]] || [[ \$raw_cpu_percent == "0" ]]; then
             linux_cpu_detected=1
+            [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] top CPU: \$cpu_percent% (raw: \$raw_cpu_percent%)" >&2
+          else
+            [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] top CPU validation failed: '\$raw_cpu_percent'" >&2
           fi
+        else
+          [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] top command failed or no CPU line found" >&2
         fi
       fi` : ''}${config.showRAM ? `
       
@@ -215,38 +334,77 @@ if [[ $sys_cached -eq 0 ]]; then
           }' /proc/meminfo 2>/dev/null)"
         
         # Validate results and mark as detected if successful
-        if [[ \$mem_total_gb && \$mem_total_gb -gt 0 ]]; then
-          linux_mem_detected=1
-          # Additional safety bounds
-          [[ \$mem_used_gb -lt 0 ]] && mem_used_gb=0
-          [[ \$mem_total_gb -lt 1 ]] && mem_total_gb=1
+        if [[ \$mem_total_gb && \$mem_used_gb ]]; then
+          # Apply comprehensive validation
+          memory_bounds_result=\$(apply_memory_bounds "\$mem_used_gb" "\$mem_total_gb")
+          read -r validated_used validated_total <<< "\$memory_bounds_result"
+          validated_percent=\$(validate_memory_percent "\$mem_percent")
+          
+          if [[ \$validated_total != "0" ]]; then
+            mem_used_gb="\$validated_used"
+            mem_total_gb="\$validated_total"
+            mem_percent="\$validated_percent"
+            linux_mem_detected=1
+            [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] /proc/meminfo Memory: \${mem_used_gb}GB/\${mem_total_gb}GB (\${mem_percent}%)" >&2
+          else
+            [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] /proc/meminfo memory validation failed" >&2
+          fi
+        else
+          [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] /proc/meminfo parsing incomplete" >&2
         fi
       fi
       
       # Fallback 1: free command for systems with limited /proc access
       if [[ \$linux_mem_detected -eq 0 ]] && command -v free >/dev/null 2>&1; then
-        free_info=\$(free -m 2>/dev/null | awk 'NR==2 {print \$2, \$7}')  # total, available
+        [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Trying free command for memory" >&2
+        free_info=\$(timeout 3s free -m 2>/dev/null | awk 'NR==2 {print \$2, \$7}')  # total, available
         if [[ \$free_info ]]; then
           read -r mem_total_mb mem_avail_mb <<< "\$free_info"
-          if [[ \$mem_total_mb && \$mem_total_mb -gt 0 ]]; then
+          validated_total_mb=\$(validate_numeric "\$mem_total_mb" "1" "999999" "0")
+          if [[ \$validated_total_mb != "0" ]]; then
             # Convert to GB and calculate percentage
-            mem_total_gb=\$(( (mem_total_mb + 512) / 1024 ))  # Round to nearest GB
-            if [[ \$mem_avail_mb && \$mem_avail_mb -gt 0 ]]; then
-              mem_used_mb=\$((mem_total_mb - mem_avail_mb))
-              mem_used_gb=\$(( (mem_used_mb + 512) / 1024 ))
-              mem_percent=\$(( mem_used_mb * 100 / mem_total_mb ))
+            raw_total_gb=\$(( (validated_total_mb + 512) / 1024 ))  # Round to nearest GB
+            
+            if [[ \$mem_avail_mb && \$mem_avail_mb != "" ]]; then
+              validated_avail_mb=\$(validate_numeric "\$mem_avail_mb" "0" "\$validated_total_mb" "0")
+              mem_used_mb=\$((validated_total_mb - validated_avail_mb))
+              raw_used_gb=\$(( (mem_used_mb + 512) / 1024 ))
+              raw_percent=\$(( mem_used_mb * 100 / validated_total_mb ))
             else
               # Estimate if available not provided
-              mem_used_gb=\$(( mem_total_gb / 2 ))
-              mem_percent=50
+              raw_used_gb=\$(( raw_total_gb / 2 ))
+              raw_percent=50
+              [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] free: no available memory info, estimating 50%" >&2
             fi
+            
+            # Apply validation
+            memory_bounds_result=\$(apply_memory_bounds "\$raw_used_gb" "\$raw_total_gb")
+            read -r mem_used_gb mem_total_gb <<< "\$memory_bounds_result"
+            mem_percent=\$(validate_memory_percent "\$raw_percent")
+            
             linux_mem_detected=1
+            [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] free Memory: \${mem_used_gb}GB/\${mem_total_gb}GB (\${mem_percent}%)" >&2
+          else
+            [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] free command total memory validation failed: '\$mem_total_mb'" >&2
           fi
+        else
+          [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] free command failed or no output" >&2
         fi
       fi` : ''}${config.showLoad ? `
       
+      # Enhanced load average detection with validation
       if [[ -r /proc/loadavg ]]; then
-        read -r load_1min load_5min load_15min _ < /proc/loadavg
+        [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Reading /proc/loadavg" >&2
+        read -r raw_load1 raw_load5 raw_load15 _ < /proc/loadavg 2>/dev/null
+        if [[ \$raw_load1 && \$raw_load5 && \$raw_load15 ]]; then
+          load_bounds_result=\$(apply_load_bounds "\$raw_load1" "\$raw_load5" "\$raw_load15")
+          read -r load_1min load_5min load_15min <<< "\$load_bounds_result"
+          [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] Load averages: \$load_1min/\$load_5min/\$load_15min" >&2
+        else
+          [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] /proc/loadavg parsing failed" >&2
+        fi
+      else
+        [[ \$CC_STATUSLINE_DEBUG ]] && echo "[DEBUG] /proc/loadavg not readable" >&2
       fi` : ''}
       ;;
     WSL*)
@@ -541,7 +699,7 @@ export function generateSystemDisplayCode(config: SystemFeature, emojis: boolean
   displayCode += `
 # ---- smart formatting utilities ----
 format_memory() {
-  local used="\$1" total="\$2" unit="\$3"
+  local used="\$1" total="\$2" unit="\$3" mem_threshold="\${4:-${memThreshold}}"
   # Dynamic unit selection based on value size
   if (( total < 1 && mem_total_kb )); then
     # Show in MB if less than 1GB total
@@ -558,6 +716,23 @@ format_memory() {
       printf "%d%s/%d%s" "\$used" "\$unit" "\$total" "\$unit"
     fi
   fi
+}
+
+format_cpu_with_status() {
+  local cpu="\$1" cpu_threshold="\${2:-${cpuThreshold}}"
+  local status=""
+  
+  # Add status indicator based on configurable CPU threshold
+  local warning_threshold=\$(echo "\$cpu_threshold * 0.8" | bc -l 2>/dev/null || echo "${Math.floor(cpuThreshold * 0.8)}")
+  if (( cpu < warning_threshold )); then
+    status="✓"  # Good (below 80% of threshold)
+  elif (( cpu < cpu_threshold )); then
+    status="⚠"  # Warning (80%-100% of threshold)  
+  else
+    status="❌"  # High CPU (above threshold)
+  fi
+  
+  printf "%d%%%s" "\$cpu" "\$status"
 }
 
 format_load_with_trend() {
@@ -577,7 +752,7 @@ format_load_with_trend() {
   fi
   
   # Add status indicator based on configurable load threshold
-  local warning_threshold=\$(echo "\$load_threshold * 0.8" | bc -l 2>/dev/null || echo "${(loadThreshold * 0.8).toFixed(1)}")
+  local warning_threshold=\$(echo "\$load_threshold * 0.8" | bc -l 2>/dev/null || echo "${(loadThreshold * 0.8).toFixed(0)}")
   if (( \$(echo "\$load1 < \$warning_threshold" | bc -l 2>/dev/null || echo 1) )); then
     status="✓"  # Good (below 80% of threshold)
   elif (( \$(echo "\$load1 < \$load_threshold" | bc -l 2>/dev/null || echo 0) )); then
@@ -610,9 +785,10 @@ get_cpu_cores() {
   if (config.showCPU) {
     const cpuEmoji = emojis ? '💻' : 'cpu:'
     displayCode += `
-# cpu usage with smart formatting
+# cpu usage with smart formatting and status indicators
 if [[ \$cpu_percent && \$cpu_percent != "0" ]]; then
-  printf '  ${cpuEmoji} %s%s%%%s' "\$(cpu_clr)" "\$cpu_percent" "\$(rst)"
+  cpu_display=\$(format_cpu_with_status "\$cpu_percent" "${cpuThreshold}")
+  printf '  ${cpuEmoji} %s%s%s' "\$(cpu_clr)" "\$cpu_display" "\$(rst)"
 fi`
   }
 
@@ -634,7 +810,7 @@ if [[ (\$cpu_percent && \$cpu_percent != "0") || (\$mem_total_gb && \$mem_total_
       displayCode += `
   # Add memory with smart formatting
   if [[ \$mem_total_gb && \$mem_total_gb -gt 0 ]]; then
-    mem_compact=\$(format_memory "\$mem_used_gb" "\$mem_total_gb" "G")
+    mem_compact=\$(format_memory "\$mem_used_gb" "\$mem_total_gb" "G" "${memThreshold}")
     [[ \$cpu_percent && \$cpu_percent != "0" ]] && printf ' '
     printf '🧠%s' "\$mem_compact"
   fi`
@@ -661,14 +837,14 @@ fi`
         displayCode += `
 # memory usage (detailed with smart formatting)
 if [[ \$mem_total_gb && \$mem_total_gb -gt 0 ]]; then
-  mem_display=\$(format_memory "\$mem_used_gb" "\$mem_total_gb" "G")
+  mem_display=\$(format_memory "\$mem_used_gb" "\$mem_total_gb" "G" "${memThreshold}")
   printf '  ${ramEmoji} %s%s (%s%%)%s' "\$(mem_clr)" "\$mem_display" "\$mem_percent" "\$(rst)"
 fi`
       } else {
         displayCode += `
 # memory usage (standard compact with smart formatting)
 if [[ \$mem_total_gb && \$mem_total_gb -gt 0 ]]; then
-  mem_display=\$(format_memory "\$mem_used_gb" "\$mem_total_gb" "G")
+  mem_display=\$(format_memory "\$mem_used_gb" "\$mem_total_gb" "G" "${memThreshold}")
   printf '  ${ramEmoji} %s%s%s' "\$(mem_clr)" "\$mem_display" "\$(rst)"
 fi`
       }

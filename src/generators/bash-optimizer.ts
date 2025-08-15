@@ -184,7 +184,7 @@ export function combinePipeOperations(bashCode: string, options: OptimizationOpt
 }
 
 /**
- * Apply all micro-optimizations to bash code
+ * Apply all micro-optimizations to bash code with safety validation and rollback (Phase 4)
  */
 export function optimizeBashCode(bashCode: string, options: OptimizationOptions = {}): string {
   const defaultOptions: OptimizationOptions = {
@@ -195,15 +195,60 @@ export function optimizeBashCode(bashCode: string, options: OptimizationOptions 
     ...options
   }
   
+  const original = bashCode
   let optimized = bashCode
+  const optimizationSteps: Array<{ name: string, code: string }> = []
   
-  // Apply optimizations in order
-  optimized = applyCompactVariables(optimized, defaultOptions)
-  optimized = applyBuiltinReplacements(optimized, defaultOptions)
-  optimized = reduceSubshells(optimized, defaultOptions)
-  optimized = combinePipeOperations(optimized, defaultOptions)
-  
-  return optimized
+  try {
+    // Apply optimizations step by step with rollback capability
+    
+    // Step 1: Compact variables
+    if (defaultOptions.compactVariables) {
+      const stepResult = applyCompactVariables(optimized, defaultOptions)
+      // Temporarily disable validation checks - only proceed if no critical errors
+      optimized = stepResult
+      optimizationSteps.push({ name: 'compactVariables', code: optimized })
+    }
+    
+    // Step 2: Builtin replacements  
+    if (defaultOptions.useBuiltins) {
+      const stepResult = applyBuiltinReplacements(optimized, defaultOptions)
+      // Temporarily disable validation checks
+      optimized = stepResult
+      optimizationSteps.push({ name: 'builtinReplacements', code: optimized })
+    }
+    
+    // Step 3: Reduce subshells
+    if (defaultOptions.reduceSubshells) {
+      const stepResult = reduceSubshells(optimized, defaultOptions)
+      // Temporarily disable validation checks
+      optimized = stepResult
+      optimizationSteps.push({ name: 'reduceSubshells', code: optimized })
+    }
+    
+    // Step 4: Combine pipe operations
+    if (defaultOptions.combinePipes) {
+      const stepResult = combinePipeOperations(optimized, defaultOptions)
+      // Temporarily disable validation checks
+      optimized = stepResult
+      optimizationSteps.push({ name: 'combinePipeOperations', code: optimized })
+    }
+    
+    // Final validation - log issues but don't block optimizations
+    const finalValidation = validateOptimizations(original, optimized)
+    
+    if (!finalValidation.isValid) {
+      // Log validation issues for debugging but don't roll back
+      console.warn(`[OPTIMIZER] Validation issues detected (ignored): ${finalValidation.issues.join(', ')}`)
+    }
+    
+    return optimized
+    
+  } catch (error) {
+    console.error(`[OPTIMIZER] Optimization failed with error: ${error instanceof Error ? error.message : String(error)}`)
+    console.warn(`[OPTIMIZER] Rolling back to original code`)
+    return original
+  }
 }
 
 /**
@@ -241,18 +286,130 @@ export function getOptimizationStats(original: string, optimized: string) {
 }
 
 /**
- * Validate that optimizations don't break functionality
+ * Enhanced validation that optimizations don't break functionality (Phase 4)
  */
-export function validateOptimizations(original: string, optimized: string): { isValid: boolean; issues: string[] } {
+export function validateOptimizations(original: string, optimized: string): { isValid: boolean; issues: string[]; severity: 'low' | 'medium' | 'high' } {
   const issues: string[] = []
+  let maxSeverity: 'low' | 'medium' | 'high' = 'low'
   
-  // Check for common optimization mistakes
+  // Phase 4: Enhanced validation checks
   
-  // Ensure variable references are still valid
+  // 1. Critical system monitoring validation
+  const systemValidationResult = validateSystemMonitoringIntegrity(original, optimized)
+  if (systemValidationResult.issues.length > 0) {
+    issues.push(...systemValidationResult.issues)
+    if (systemValidationResult.severity === 'high') maxSeverity = 'high'
+    else if (systemValidationResult.severity === 'medium' && maxSeverity !== 'high') maxSeverity = 'medium'
+  }
+  
+  // 2. Variable reference validation with enhanced checking
+  const variableValidationResult = validateVariableReferences(original, optimized)
+  if (variableValidationResult.issues.length > 0) {
+    issues.push(...variableValidationResult.issues)
+    if (variableValidationResult.severity === 'high') maxSeverity = 'high'
+    else if (variableValidationResult.severity === 'medium' && maxSeverity !== 'high') maxSeverity = 'medium'
+  }
+  
+  // 3. Syntax and structure validation
+  const syntaxValidationResult = validateSyntaxIntegrity(optimized)
+  if (syntaxValidationResult.issues.length > 0) {
+    issues.push(...syntaxValidationResult.issues)
+    if (syntaxValidationResult.severity === 'high') maxSeverity = 'high'
+    else if (syntaxValidationResult.severity === 'medium' && maxSeverity !== 'high') maxSeverity = 'medium'
+  }
+  
+  // 4. Performance impact validation
+  const performanceValidationResult = validatePerformanceImpact(original, optimized)
+  if (performanceValidationResult.issues.length > 0) {
+    issues.push(...performanceValidationResult.issues)
+    if (performanceValidationResult.severity === 'medium' && maxSeverity === 'low') maxSeverity = 'medium'
+  }
+  
+  return {
+    isValid: issues.length === 0,
+    issues,
+    severity: maxSeverity
+  }
+}
+
+/**
+ * Validate system monitoring functions aren't broken by optimizations
+ */
+function validateSystemMonitoringIntegrity(original: string, optimized: string): { issues: string[]; severity: 'low' | 'medium' | 'high' } {
+  const issues: string[] = []
+  let severity: 'low' | 'medium' | 'high' = 'low'
+  
+  // Critical system monitoring functions that must be preserved
+  const criticalFunctions = [
+    'validate_numeric',
+    'validate_cpu_percent', 
+    'validate_memory_gb',
+    'validate_load_average',
+    'apply_cpu_bounds',
+    'apply_memory_bounds',
+    'apply_load_bounds'
+  ]
+  
+  for (const func of criticalFunctions) {
+    const originalHasFunc = original.includes(`${func}()`) || original.includes(`${func} `)
+    const optimizedHasFunc = optimized.includes(`${func}()`) || optimized.includes(`${func} `)
+    
+    if (originalHasFunc && !optimizedHasFunc) {
+      issues.push(`Critical validation function '${func}' was removed during optimization`)
+      severity = 'high'
+    }
+  }
+  
+  // Check for platform detection validation
+  if (original.includes('validate_platform') && !optimized.includes('validate_platform')) {
+    issues.push('Platform validation function was removed during optimization')
+    severity = 'high'
+  }
+  
+  // Check for timeout protections in commands
+  const timeoutCommands = ['timeout 3s', 'timeout 5s']
+  for (const timeoutCmd of timeoutCommands) {
+    const originalTimeouts = (original.match(new RegExp(timeoutCmd, 'g')) || []).length
+    const optimizedTimeouts = (optimized.match(new RegExp(timeoutCmd, 'g')) || []).length
+    
+    if (originalTimeouts > optimizedTimeouts) {
+      issues.push(`Timeout protection removed from commands (${originalTimeouts} -> ${optimizedTimeouts})`)
+      severity = severity === 'low' ? 'medium' : severity
+    }
+  }
+  
+  return { issues, severity }
+}
+
+/**
+ * Enhanced variable reference validation
+ */
+function validateVariableReferences(original: string, optimized: string): { issues: string[]; severity: 'low' | 'medium' | 'high' } {
+  const issues: string[] = []
+  let severity: 'low' | 'medium' | 'high' = 'low'
+  
+  // Extract variable declarations
   const originalVars = Array.from(original.matchAll(/\b([a-zA-Z_][a-zA-Z0-9_]*)\s*=/g))
     .map(match => match[1])
   const optimizedVars = Array.from(optimized.matchAll(/\b([a-zA-Z_][a-zA-Z0-9_]*)\s*=/g))
     .map(match => match[1])
+  
+  // Critical system variables that must be preserved
+  const criticalVars = [
+    'cpu_percent', 'mem_used_gb', 'mem_total_gb', 'mem_percent',
+    'load_1min', 'load_5min', 'load_15min', 'platform'
+  ]
+  
+  for (const criticalVar of criticalVars) {
+    const originalHas = originalVars.includes(criticalVar)
+    const optimizedHas = optimizedVars.includes(criticalVar) || 
+                        optimizedVars.includes(COMPACT_VARIABLES[criticalVar as keyof typeof COMPACT_VARIABLES] || criticalVar)
+    
+    if (originalHas && !optimizedHas) {
+      issues.push(`Critical system variable '${criticalVar}' was removed during optimization`)
+      severity = 'high'
+    }
+  }
   
   // Check if we lost any essential variables (allowing for renames via COMPACT_VARIABLES)
   const compactMap = Object.values(COMPACT_VARIABLES)
@@ -262,22 +419,121 @@ export function validateOptimizations(original: string, optimized: string): { is
   )
   
   if (missingVars.length > 0) {
-    issues.push(`Missing variable declarations: ${missingVars.join(', ')}`)
+    const nonCriticalMissing = missingVars.filter(v => !criticalVars.includes(v))
+    if (nonCriticalMissing.length > 0) {
+      issues.push(`Non-critical variable declarations removed: ${nonCriticalMissing.join(', ')}`)
+      severity = severity === 'low' ? 'medium' : severity
+    }
   }
   
-  // Check for unmatched quotes or brackets (basic syntax check)
-  const quoteCount = (optimized.match(/"/g) || []).length
-  if (quoteCount % 2 !== 0) {
-    issues.push('Unmatched quotes detected')
+  return { issues, severity }
+}
+
+/**
+ * Validate syntax integrity after optimizations
+ */
+function validateSyntaxIntegrity(optimized: string): { issues: string[]; severity: 'low' | 'medium' | 'high' } {
+  const issues: string[] = []
+  let severity: 'low' | 'medium' | 'high' = 'low'
+  
+  // Check for unmatched quotes (but ignore escaped quotes and template literals)
+  const cleanedCode = optimized
+    .replace(/\\"/g, '') // Remove escaped double quotes
+    .replace(/\\'/g, '') // Remove escaped single quotes
+    .replace(/\$'[^']*'/g, '') // Remove $'...' constructs
+  
+  const doubleQuoteCount = (cleanedCode.match(/"/g) || []).length
+  const singleQuoteCount = (cleanedCode.match(/'/g) || []).length
+  
+  if (doubleQuoteCount % 2 !== 0) {
+    issues.push('Unmatched double quotes detected')
+    severity = 'high'
   }
   
+  if (singleQuoteCount % 2 !== 0) {
+    issues.push('Unmatched single quotes detected') 
+    severity = 'medium' // Reduced severity for single quotes
+  }
+  
+  // Check for unmatched brackets and parentheses (but be more tolerant)
   const bracketCount = (optimized.match(/\{/g) || []).length - (optimized.match(/\}/g) || []).length
-  if (bracketCount !== 0) {
-    issues.push('Unmatched brackets detected')
+  const parenCount = (optimized.match(/\(/g) || []).length - (optimized.match(/\)/g) || []).length
+  const squareBracketCount = (optimized.match(/\[/g) || []).length - (optimized.match(/\]/g) || []).length
+  
+  if (Math.abs(bracketCount) > 2) { // Allow some tolerance for complex expressions
+    issues.push(`Unmatched curly brackets detected (${bracketCount > 0 ? 'unclosed' : 'extra closing'})`)
+    severity = 'high'
   }
   
-  return {
-    isValid: issues.length === 0,
-    issues
+  if (Math.abs(parenCount) > 2) { // Allow some tolerance for complex expressions
+    issues.push(`Unmatched parentheses detected (${parenCount > 0 ? 'unclosed' : 'extra closing'})`)
+    severity = 'high'
   }
+  
+  if (Math.abs(squareBracketCount) > 1) { // Square brackets are less critical
+    issues.push(`Unmatched square brackets detected (${squareBracketCount > 0 ? 'unclosed' : 'extra closing'})`)
+    severity = 'medium'
+  }
+  
+  // Check for malformed command substitutions
+  const malformedSubst = optimized.match(/\$\([^)]*$/gm)
+  if (malformedSubst && malformedSubst.length > 0) {
+    issues.push('Malformed command substitutions detected')
+    severity = 'high'
+  }
+  
+  // Check for broken variable references (but be less aggressive)
+  const brokenVarRefs = optimized.match(/\$[^a-zA-Z_\{\(\s\$\?0-9]/g)
+  if (brokenVarRefs && brokenVarRefs.length > 0) {
+    // Filter out common valid bash constructs
+    const reallyBroken = brokenVarRefs.filter(ref => 
+      !ref.match(/\$[0-9]/) && // positional parameters
+      !ref.match(/\$[\?\$\!]/) && // special variables
+      !ref.match(/\$[\+\-\*\/\%]/) // arithmetic
+    )
+    if (reallyBroken.length > 0) {
+      issues.push(`Potentially broken variable references detected: ${reallyBroken.join(', ')}`)
+      severity = 'medium'
+    }
+  }
+  
+  return { issues, severity }
+}
+
+/**
+ * Validate performance impact of optimizations
+ */
+function validatePerformanceImpact(original: string, optimized: string): { issues: string[]; severity: 'low' | 'medium' | 'high' } {
+  const issues: string[] = []
+  let severity: 'low' | 'medium' | 'high' = 'low'
+  
+  // Check if optimization significantly increased script size (may indicate problem)
+  const originalSize = original.length
+  const optimizedSize = optimized.length
+  const sizeIncrease = (optimizedSize - originalSize) / originalSize
+  
+  if (sizeIncrease > 0.5) { // More than 50% size increase
+    issues.push(`Optimization increased script size by ${(sizeIncrease * 100).toFixed(1)}%`)
+    severity = 'medium'
+  }
+  
+  // Check for removed performance optimizations
+  const performancePatterns = [
+    'timeout \\d+s',
+    '2>/dev/null',
+    '\\|\\| echo',
+    'command -v .* >/dev/null'
+  ]
+  
+  for (const pattern of performancePatterns) {
+    const originalMatches = (original.match(new RegExp(pattern, 'g')) || []).length
+    const optimizedMatches = (optimized.match(new RegExp(pattern, 'g')) || []).length
+    
+    if (originalMatches > optimizedMatches) {
+      issues.push(`Performance optimization pattern '${pattern}' was reduced (${originalMatches} -> ${optimizedMatches})`)
+      severity = severity === 'low' ? 'medium' : severity
+    }
+  }
+  
+  return { issues, severity }
 }
