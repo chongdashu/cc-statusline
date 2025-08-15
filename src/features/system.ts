@@ -8,6 +8,11 @@ export interface SystemFeature {
   showLoad: boolean
   refreshRate: number
   displayFormat: 'compact' | 'detailed'
+  thresholds?: {
+    cpuThreshold: number
+    memoryThreshold: number
+    loadThreshold: number
+  }
 }
 
 export function generateSystemBashCode(config: SystemFeature, colors: boolean): string {
@@ -27,24 +32,29 @@ export function generateSystemBashCode(config: SystemFeature, colors: boolean): 
     return cachedResult
   }
 
+  // Use configurable thresholds or defaults
+  const cpuThreshold = config.thresholds?.cpuThreshold || 75
+  const memThreshold = config.thresholds?.memoryThreshold || 80
+  const loadThreshold = config.thresholds?.loadThreshold || 2.0
+  
   const colorCode = colors ? `
-# ---- system colors ----
+# ---- system colors with configurable thresholds ----
 cpu_clr() { 
-  if (( cpu_percent > 80 )); then CLR='1;31'
-  elif (( cpu_percent > 50 )); then CLR='1;33'
-  else CLR='1;32'; fi
+  if (( cpu_percent > ${Math.round(cpuThreshold * 1.1)} )); then CLR='1;31'  # Red at 110% of threshold
+  elif (( cpu_percent > ${cpuThreshold} )); then CLR='1;33'  # Yellow at threshold
+  else CLR='1;32'; fi  # Green below threshold
   [[ $use_color -eq 1 ]] && printf '\\033[%sm' "$CLR"
 }
 mem_clr() { 
-  if (( mem_percent > 85 )); then CLR='1;31'
-  elif (( mem_percent > 60 )); then CLR='1;33'
-  else CLR='1;32'; fi
+  if (( mem_percent > ${Math.round(memThreshold * 1.1)} )); then CLR='1;31'  # Red at 110% of threshold
+  elif (( mem_percent > ${memThreshold} )); then CLR='1;33'  # Yellow at threshold
+  else CLR='1;32'; fi  # Green below threshold
   [[ $use_color -eq 1 ]] && printf '\\033[%sm' "$CLR"
 }
 load_clr() { 
-  if (( \$(echo "$load_1min > 2.0" | bc -l 2>/dev/null || echo 0) )); then CLR='1;31'
-  elif (( \$(echo "$load_1min > 1.0" | bc -l 2>/dev/null || echo 0) )); then CLR='1;33'
-  else CLR='1;32'; fi
+  if (( \$(echo "$load_1min > ${(loadThreshold * 1.1).toFixed(1)}" | bc -l 2>/dev/null || echo 0) )); then CLR='1;31'  # Red at 110% of threshold
+  elif (( \$(echo "$load_1min > ${loadThreshold}" | bc -l 2>/dev/null || echo 0) )); then CLR='1;33'  # Yellow at threshold
+  else CLR='1;32'; fi  # Green below threshold
   [[ $use_color -eq 1 ]] && printf '\\033[%sm' "$CLR"
 }
 sys_clr() { [[ $use_color -eq 1 ]] && printf '\\033[1;36m'; }
@@ -520,66 +530,173 @@ fi`
 export function generateSystemDisplayCode(config: SystemFeature, emojis: boolean): string {
   if (!config.enabled) return ''
 
+  // Get threshold values with defaults
+  const cpuThreshold = config.thresholds?.cpuThreshold || 75
+  const memThreshold = config.thresholds?.memoryThreshold || 80
+  const loadThreshold = config.thresholds?.loadThreshold || 2.0
+
   let displayCode = ''
+
+  // Add smart formatting utility functions with configurable thresholds
+  displayCode += `
+# ---- smart formatting utilities ----
+format_memory() {
+  local used="\$1" total="\$2" unit="\$3"
+  # Dynamic unit selection based on value size
+  if (( total < 1 && mem_total_kb )); then
+    # Show in MB if less than 1GB total
+    local used_mb=\$(( (mem_used_kb + 512) / 1024 ))
+    local total_mb=\$(( (mem_total_kb + 512) / 1024 ))
+    printf "%d%s/%d%s" "\$used_mb" "M" "\$total_mb" "M"
+  else
+    # Show in GB with appropriate precision
+    if (( used < 10 && total < 10 )); then
+      # High precision for small values
+      printf "%.1f%s/%.1f%s" "\$used" "\$unit" "\$total" "\$unit"
+    else
+      # Lower precision for larger values
+      printf "%d%s/%d%s" "\$used" "\$unit" "\$total" "\$unit"
+    fi
+  fi
+}
+
+format_load_with_trend() {
+  local load1="\$1" load5="\$2" show_trend="\$3" load_threshold="\${4:-${loadThreshold}}"
+  local trend=""
+  local status=""
+  
+  # Calculate trend indicator if requested
+  if [[ \$show_trend == "1" ]]; then
+    if (( \$(echo "\$load1 > \$load5 + 0.1" | bc -l 2>/dev/null || echo 0) )); then
+      trend="↗"  # Increasing (significant difference)
+    elif (( \$(echo "\$load1 < \$load5 - 0.1" | bc -l 2>/dev/null || echo 0) )); then
+      trend="↘"  # Decreasing (significant difference)
+    else
+      trend="→"  # Stable
+    fi
+  fi
+  
+  # Add status indicator based on configurable load threshold
+  local warning_threshold=\$(echo "\$load_threshold * 0.8" | bc -l 2>/dev/null || echo "${(loadThreshold * 0.8).toFixed(1)}")
+  if (( \$(echo "\$load1 < \$warning_threshold" | bc -l 2>/dev/null || echo 1) )); then
+    status="✓"  # Good (below 80% of threshold)
+  elif (( \$(echo "\$load1 < \$load_threshold" | bc -l 2>/dev/null || echo 0) )); then
+    status="⚠"  # Warning (80%-100% of threshold)
+  else
+    status="❌"  # High load (above threshold)
+  fi
+  
+  # Format load with appropriate precision
+  if (( \$(echo "\$load1 < 10" | bc -l 2>/dev/null || echo 1) )); then
+    printf "%.1f%s%s" "\$load1" "\$trend" "\$status"
+  else
+    printf "%.0f%s%s" "\$load1" "\$trend" "\$status"
+  fi
+}
+
+get_cpu_cores() {
+  # Get CPU core count for load context
+  if command -v nproc >/dev/null 2>&1; then
+    nproc 2>/dev/null || echo "1"
+  elif [[ -r /proc/cpuinfo ]]; then
+    grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo "1"
+  elif command -v sysctl >/dev/null 2>&1; then
+    sysctl -n hw.ncpu 2>/dev/null || echo "1"
+  else
+    echo "1"
+  fi
+}`
 
   if (config.showCPU) {
     const cpuEmoji = emojis ? '💻' : 'cpu:'
     displayCode += `
-# cpu usage
+# cpu usage with smart formatting
 if [[ \$cpu_percent && \$cpu_percent != "0" ]]; then
   printf '  ${cpuEmoji} %s%s%%%s' "\$(cpu_clr)" "\$cpu_percent" "\$(rst)"
 fi`
   }
 
-  if (config.showRAM) {
-    const ramEmoji = emojis ? '🧠' : 'ram:'
-    if (config.displayFormat === 'detailed') {
+  // Enhanced compact mode: Group all system metrics in a single line for maximum space efficiency
+  if (config.displayFormat === 'compact' && (config.showCPU || config.showRAM || config.showLoad)) {
+    const systemEmoji = emojis ? '💻' : 'sys:'
+    displayCode += `
+# system metrics (ultra-compact grouped display)
+if [[ (\$cpu_percent && \$cpu_percent != "0") || (\$mem_total_gb && \$mem_total_gb -gt 0) || (\$load_1min && \$load_1min != "0") ]]; then
+  printf '  ${systemEmoji} %s' "\$(sys_clr)"`
+  
+    if (config.showCPU) {
       displayCode += `
-# memory usage (detailed)
-if [[ \$mem_total_gb && \$mem_total_gb -gt 0 ]]; then
-  printf '  ${ramEmoji} %s%sGB/%sGB (%s%%)%s' "\$(mem_clr)" "\$mem_used_gb" "\$mem_total_gb" "\$mem_percent" "\$(rst)"
-fi`
-    } else {
-      displayCode += `
-# memory usage (compact)
-if [[ \$mem_total_gb && \$mem_total_gb -gt 0 ]]; then
-  printf '  ${ramEmoji} %s%sG/%sG%s' "\$(mem_clr)" "\$mem_used_gb" "\$mem_total_gb" "\$(rst)"
-fi`
+  # Add CPU if available
+  [[ \$cpu_percent && \$cpu_percent != "0" ]] && printf '%s%%' "\$cpu_percent"`
     }
-  }
+    
+    if (config.showRAM) {
+      displayCode += `
+  # Add memory with smart formatting
+  if [[ \$mem_total_gb && \$mem_total_gb -gt 0 ]]; then
+    mem_compact=\$(format_memory "\$mem_used_gb" "\$mem_total_gb" "G")
+    [[ \$cpu_percent && \$cpu_percent != "0" ]] && printf ' '
+    printf '🧠%s' "\$mem_compact"
+  fi`
+    }
+    
+    if (config.showLoad) {
+      displayCode += `
+  # Add load with trend
+  if [[ \$load_1min && \$load_1min != "0" ]]; then
+    load_compact=\$(format_load_with_trend "\$load_1min" "\$load_5min" "1" "${loadThreshold}")
+    [[ (\$cpu_percent && \$cpu_percent != "0") || (\$mem_total_gb && \$mem_total_gb -gt 0) ]] && printf ' '
+    printf '⚡%s' "\$load_compact"
+  fi`
+    }
+    
+    displayCode += `
+  printf '%s' "\$(rst)"
+fi`
+  } else {
+    // Original detailed/individual displays
+    if (config.showRAM) {
+      const ramEmoji = emojis ? '🧠' : 'ram:'
+      if (config.displayFormat === 'detailed') {
+        displayCode += `
+# memory usage (detailed with smart formatting)
+if [[ \$mem_total_gb && \$mem_total_gb -gt 0 ]]; then
+  mem_display=\$(format_memory "\$mem_used_gb" "\$mem_total_gb" "G")
+  printf '  ${ramEmoji} %s%s (%s%%)%s' "\$(mem_clr)" "\$mem_display" "\$mem_percent" "\$(rst)"
+fi`
+      } else {
+        displayCode += `
+# memory usage (standard compact with smart formatting)
+if [[ \$mem_total_gb && \$mem_total_gb -gt 0 ]]; then
+  mem_display=\$(format_memory "\$mem_used_gb" "\$mem_total_gb" "G")
+  printf '  ${ramEmoji} %s%s%s' "\$(mem_clr)" "\$mem_display" "\$(rst)"
+fi`
+      }
+    }
 
-  if (config.showLoad) {
-    const loadEmoji = emojis ? '⚡' : 'load:'
-    if (config.displayFormat === 'detailed') {
-      displayCode += `
-# system load (detailed with context)
+    if (config.showLoad) {
+      const loadEmoji = emojis ? '⚡' : 'load:'
+      if (config.displayFormat === 'detailed') {
+        displayCode += `
+# system load (detailed with context and smart formatting)
 if [[ \$load_1min && \$load_1min != "0" ]]; then
-  # Add load status indicator
-  load_status=""
-  if (( \$(echo "\$load_1min < 1.0" | bc -l 2>/dev/null || echo 1) )); then
-    load_status="✓"  # Good
-  elif (( \$(echo "\$load_1min < 2.0" | bc -l 2>/dev/null || echo 0) )); then
-    load_status="⚠"  # Warning
+  cpu_cores=\$(get_cpu_cores)
+  load_display=\$(format_load_with_trend "\$load_1min" "\$load_5min" "0" "${loadThreshold}")
+  # Show load context relative to CPU cores
+  if (( cpu_cores > 1 )); then
+    printf '  ${loadEmoji} %s%s%s (%sc: %s/%s/%s)' "\$(load_clr)" "\$load_display" "\$(rst)" "\$cpu_cores" "\$load_1min" "\$load_5min" "\$load_15min"
   else
-    load_status="⚠"  # High load
+    printf '  ${loadEmoji} %s%s%s (1m/5m/15m: %s/%s/%s)' "\$(load_clr)" "\$load_display" "\$(rst)" "\$load_1min" "\$load_5min" "\$load_15min"
   fi
-  printf '  ${loadEmoji} Load: %s%s%s %s (1m/5m/15m: %s/%s/%s)' "\$(load_clr)" "\$load_1min" "\$(rst)" "\$load_status" "\$load_1min" "\$load_5min" "\$load_15min"
 fi`
-    } else {
-      displayCode += `
-# system load (compact with status)
+      } else {
+        displayCode += `
+# system load (standard compact with trend and smart formatting)
 if [[ \$load_1min && \$load_1min != "0" ]]; then
-  # Add trend indicator based on 1min vs 5min
-  trend=""
-  if (( \$(echo "\$load_1min > \$load_5min" | bc -l 2>/dev/null || echo 0) )); then
-    trend="↗"  # Increasing
-  elif (( \$(echo "\$load_1min < \$load_5min" | bc -l 2>/dev/null || echo 0) )); then
-    trend="↘"  # Decreasing  
-  else
-    trend="→"  # Stable
-  fi
-  printf '  ${loadEmoji} %s%s%s%s' "\$(load_clr)" "\$load_1min" "\$trend" "\$(rst)"
+  load_display=\$(format_load_with_trend "\$load_1min" "\$load_5min" "1" "${loadThreshold}")
+  printf '  ${loadEmoji} %s%s%s' "\$(load_clr)" "\$load_display" "\$(rst)"
 fi`
+      }
     }
   }
 

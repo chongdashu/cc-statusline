@@ -100,17 +100,73 @@ export function generateMockCcusageOutput(): any {
   }
 }
 
-export function generateMockSystemData(platform?: 'Linux' | 'WSL' | 'Darwin' | 'Windows'): any {
-  const baseData = {
-    cpu_percent: 45.2,
-    memory_used_gb: 8,
-    memory_total_gb: 16,
-    memory_percent: 50.0,
-    load_1min: 1.25,
-    load_5min: 1.15,
-    load_15min: 0.98,
-    platform: platform || "Linux"
+export function generateMockSystemData(platform?: 'Linux' | 'WSL' | 'Darwin' | 'Windows', scenario?: 'low' | 'normal' | 'high' | 'trending_up' | 'trending_down'): any {
+  let baseData: any
+  
+  // Generate different scenarios to test Phase 3 features
+  switch (scenario) {
+    case 'low':
+      // Low resource usage - should show green status indicators
+      baseData = {
+        cpu_percent: 15,
+        memory_used_gb: 2,
+        memory_total_gb: 16,
+        memory_percent: 12.5,
+        load_1min: 0.25,
+        load_5min: 0.30,
+        load_15min: 0.35,
+      }
+      break
+    case 'high':
+      // High resource usage - should show red status indicators  
+      baseData = {
+        cpu_percent: 85,
+        memory_used_gb: 14,
+        memory_total_gb: 16,
+        memory_percent: 87.5,
+        load_1min: 3.5,
+        load_5min: 3.2,
+        load_15min: 2.8,
+      }
+      break
+    case 'trending_up':
+      // Load increasing trend - should show ↗ indicator
+      baseData = {
+        cpu_percent: 55,
+        memory_used_gb: 8,
+        memory_total_gb: 16,
+        memory_percent: 50.0,
+        load_1min: 2.1,
+        load_5min: 1.5,
+        load_15min: 1.2,
+      }
+      break
+    case 'trending_down':
+      // Load decreasing trend - should show ↘ indicator
+      baseData = {
+        cpu_percent: 35,
+        memory_used_gb: 6,
+        memory_total_gb: 16,
+        memory_percent: 37.5,
+        load_1min: 0.8,
+        load_5min: 1.3,
+        load_15min: 1.8,
+      }
+      break
+    default:
+      // Normal scenario
+      baseData = {
+        cpu_percent: 45.2,
+        memory_used_gb: 8,
+        memory_total_gb: 16,
+        memory_percent: 50.0,
+        load_1min: 1.25,
+        load_5min: 1.15,
+        load_15min: 0.98,
+      }
   }
+  
+  baseData.platform = platform || "Linux"
 
   // Platform-specific variations
   switch (platform) {

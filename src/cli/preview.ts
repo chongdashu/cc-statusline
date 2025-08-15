@@ -71,12 +71,44 @@ export async function previewCommand(scriptPath: string): Promise<void> {
       }
     }
     
-    // System monitoring validation
-    const systemFeatures = ['💻', '🧠', '⚡', 'cpu:', 'ram:', 'load:']
+    // Enhanced system monitoring validation with Phase 3 features
+    const systemFeatures = ['💻', '🧠', '⚡', 'cpu:', 'ram:', 'load:', 'sys:']
     const hasSystemMonitoring = systemFeatures.some(feature => testResult.output.includes(feature))
     
     if (hasSystemMonitoring) {
       console.log(chalk.green('✅ System monitoring features are working'))
+      
+      // Validate Phase 3 Display Intelligence features
+      const trendIndicators = ['↗', '↘', '→']
+      const statusIndicators = ['✓', '⚠', '❌']
+      const hasTrends = trendIndicators.some(indicator => testResult.output.includes(indicator))
+      const hasStatus = statusIndicators.some(indicator => testResult.output.includes(indicator))
+      
+      if (hasTrends) {
+        console.log(chalk.green('✅ Load trend indicators detected'))
+      }
+      
+      if (hasStatus) {
+        console.log(chalk.green('✅ System status indicators detected'))
+      }
+      
+      // Check for smart formatting patterns
+      const smartFormats = [
+        /\d+M\/\d+M/,  // MB format
+        /\d+\.\d+G\/\d+\.\d+G/,  // GB with decimals
+        /\d+G\/\d+G/,  // GB integer format
+        /\d+c:/  // CPU cores context
+      ]
+      const hasSmartFormatting = smartFormats.some(pattern => pattern.test(testResult.output))
+      
+      if (hasSmartFormatting) {
+        console.log(chalk.green('✅ Smart formatting detected'))
+      }
+      
+      // Check for ultra-compact mode (multiple metrics in one line)
+      if (testResult.output.includes('sys:') || (testResult.output.includes('💻') && testResult.output.includes('🧠') && testResult.output.includes('⚡'))) {
+        console.log(chalk.green('✅ Enhanced compact mode detected'))
+      }
       
       // Performance timing breakdown if debug info is available
       if (testResult.output.includes('Collection time:')) {
@@ -91,6 +123,11 @@ export async function previewCommand(scriptPath: string): Promise<void> {
             console.log(chalk.green('   ✅ System monitoring is highly optimized'))
           }
         }
+      }
+      
+      // Validate configurable thresholds are working
+      if (testResult.output.includes('# Red at') || testResult.output.includes('# Yellow at')) {
+        console.log(chalk.green('✅ Configurable thresholds are active'))
       }
     }
     

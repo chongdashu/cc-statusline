@@ -2,7 +2,7 @@ import { StatuslineConfig } from '../cli/prompts.js'
 import { generateColorBashCode, generateBasicColors } from '../features/colors.js'
 import { generateGitBashCode, generateGitDisplayCode, generateGitUtilities } from '../features/git.js'
 import { generateUsageBashCode, generateUsageDisplayCode, generateUsageUtilities } from '../features/usage.js'
-import { generateSystemBashCode, generateSystemDisplayCode, generateSystemUtilities } from '../features/system.js'
+import { generateSystemBashCode, generateSystemDisplayCode, generateSystemUtilities, SystemFeature } from '../features/system.js'
 import { cacheManager, generateFeatureHash } from '../utils/cache-manager.js'
 import { generateOptimizedBashStatusline } from './template-cache.js'
 import { optimizeBashCode, getOptimizationStats } from './bash-optimizer.js'
@@ -64,13 +64,20 @@ export function generateBashStatusline(config: StatuslineConfig): string {
     compactMode: config.theme === 'compact'
   }
 
-  const systemConfig = {
+  const systemConfig: SystemFeature = {
     enabled: hasSystem,
     showCPU: features.has('cpu'),
     showRAM: features.has('memory'),
     showLoad: features.has('load'),
     refreshRate: config.systemMonitoring?.refreshRate || 3,
-    displayFormat: config.theme === 'compact' ? 'compact' : 'detailed'
+    displayFormat: config.theme === 'compact' ? 'compact' as const : 'detailed' as const,
+    ...(config.systemMonitoring && {
+      thresholds: {
+        cpuThreshold: config.systemMonitoring.cpuThreshold,
+        memoryThreshold: config.systemMonitoring.memoryThreshold,
+        loadThreshold: config.systemMonitoring.loadThreshold
+      }
+    })
   }
 
   // Use array for better performance than string concatenation
