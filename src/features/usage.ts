@@ -10,6 +10,25 @@ export interface UsageFeature {
 export function generateUsageBashCode(config: UsageFeature, colors: boolean): string {
   if (!config.enabled) return ''
 
+  // Build optimized jq query fields
+  const jqFields: string[] = []
+  if (config.showCost) {
+    jqFields.push('cost_usd: (.costUSD // "")')
+    jqFields.push('cost_per_hour: (.burnRate.costPerHour // "")')
+  }
+  if (config.showTokens) {
+    jqFields.push('tot_tokens: (.totalTokens // "")')
+  }
+  if (config.showBurnRate) {
+    jqFields.push('tpm: (.burnRate.tokensPerMinute // "")')
+  }
+  if (config.showSession || config.showProgressBar) {
+    jqFields.push('reset_time_str: (.usageLimitResetTime // .endTime // "")')
+    jqFields.push('start_time_str: (.startTime // "")')
+  }
+  
+  const jqQuery = jqFields.length > 0 ? `{${jqFields.join(', ')}}` : '{}'
+
   const colorCode = colors ? `
 # ---- usage colors ----
 usage_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[1;35m'; fi; }
@@ -33,31 +52,45 @@ session_txt=""; session_pct=0; session_bar=""
 cost_usd=""; cost_per_hour=""; tpm=""; tot_tokens=""
 
 if command -v jq >/dev/null 2>&1; then
-  blocks_output=$(npx ccusage@latest blocks --json 2>/dev/null || ccusage blocks --json 2>/dev/null)
-  if [ -n "$blocks_output" ]; then
-    active_block=$(echo "$blocks_output" | jq -c '.blocks[] | select(.isActive == true)' 2>/dev/null | head -n1)
-    if [ -n "$active_block" ]; then${config.showCost ? `
-      cost_usd=$(echo "$active_block" | jq -r '.costUSD // empty')
-      cost_per_hour=$(echo "$active_block" | jq -r '.burnRate.costPerHour // empty')` : ''}${config.showTokens ? `
-      tot_tokens=$(echo "$active_block" | jq -r '.totalTokens // empty')` : ''}${config.showBurnRate ? `
-      tpm=$(echo "$active_block" | jq -r '.burnRate.tokensPerMinute // empty')` : ''}${config.showSession || config.showProgressBar ? `
-      
-      # Session time calculation
-      reset_time_str=$(echo "$active_block" | jq -r '.usageLimitResetTime // .endTime // empty')
-      start_time_str=$(echo "$active_block" | jq -r '.startTime // empty')
-      
-      if [ -n "$reset_time_str" ] && [ -n "$start_time_str" ]; then
-        start_sec=$(to_epoch "$start_time_str"); end_sec=$(to_epoch "$reset_time_str"); now_sec=$(date +%s)
-        total=$(( end_sec - start_sec )); (( total<1 )) && total=1
-        elapsed=$(( now_sec - start_sec )); (( elapsed<0 ))&&elapsed=0; (( elapsed>total ))&&elapsed=$total
-        session_pct=$(( elapsed * 100 / total ))
-        remaining=$(( end_sec - now_sec )); (( remaining<0 )) && remaining=0
-        rh=$(( remaining / 3600 )); rm=$(( (remaining % 3600) / 60 ))
-        end_hm=$(fmt_time_hm "$end_sec")${config.showSession ? `
-        session_txt="$(printf '%dh %dm until reset at %s (%d%%)' "$rh" "$rm" "$end_hm" "$session_pct")"` : ''}${config.showProgressBar ? `
-        session_bar=$(progress_bar "$session_pct" 10)` : ''}
-      fi` : ''}
+  # Try cache first (valid for 30 seconds)
+  cache_file="\${HOME}/.claude/ccusage_cache.json"
+  cache_age=30
+  use_cache=0
+  
+  if [ -f "$cache_file" ] && [ $(($(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0))) -lt $cache_age ]; then
+    use_cache=1
+    blocks_output=$(cat "$cache_file" 2>/dev/null)
+  fi
+  
+  if [ $use_cache -eq 0 ]; then
+    # Try local ccusage first, fallback to npx
+    blocks_output=$(ccusage blocks --json 2>/dev/null || timeout 3 npx ccusage@latest blocks --json 2>/dev/null)
+    if [ -n "$blocks_output" ]; then
+      mkdir -p "\${HOME}/.claude" 2>/dev/null
+      echo "$blocks_output" > "$cache_file" 2>/dev/null
     fi
+  fi
+  
+  if [ -n "$blocks_output" ]; then
+    # Single optimized jq call for all data extraction
+    eval "$(echo "$blocks_output" | jq -r '
+      .blocks[] | select(.isActive == true) | 
+      ${jqQuery} | 
+      to_entries | .[] | "\\(.key)=\\(.value | @sh)"
+    ' 2>/dev/null)" 2>/dev/null${config.showSession || config.showProgressBar ? `
+    
+    # Session time calculation
+    if [ -n "$reset_time_str" ] && [ -n "$start_time_str" ]; then
+      start_sec=$(to_epoch "$start_time_str"); end_sec=$(to_epoch "$reset_time_str"); now_sec=$(date +%s)
+      total=$(( end_sec - start_sec )); (( total<1 )) && total=1
+      elapsed=$(( now_sec - start_sec )); (( elapsed<0 ))&&elapsed=0; (( elapsed>total ))&&elapsed=$total
+      session_pct=$(( elapsed * 100 / total ))
+      remaining=$(( end_sec - now_sec )); (( remaining<0 )) && remaining=0
+      rh=$(( remaining / 3600 )); rm=$(( (remaining % 3600) / 60 ))
+      end_hm=$(fmt_time_hm "$end_sec")${config.showSession ? `
+      session_txt="$(printf '%dh %dm until reset at %s (%d%%)' "$rh" "$rm" "$end_hm" "$session_pct")"` : ''}${config.showProgressBar ? `
+      session_bar=$(progress_bar "$session_pct" 10)` : ''}
+    fi` : ''}
   fi
 fi`
 }
