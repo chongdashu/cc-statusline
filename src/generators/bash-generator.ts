@@ -219,7 +219,7 @@ printf '  ${modelEmoji} %s%s%s' "${modelColorPrefix}" "$model_name" "${modelColo
       case 'burnrate':
         // Only add usage display once
         if (feature === 'usage' || (!features.has('usage') && feature === 'session')) {
-          displayCode += generateUsageDisplayCode(usageConfig, config.colors, emojis)
+          displayCode += generateUsageDisplayCode(usageConfig, emojis)
         }
         break
     }

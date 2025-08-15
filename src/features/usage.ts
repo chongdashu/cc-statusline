@@ -133,7 +133,7 @@ progress_bar() {
   return optimizeBashCode(utilities)
 }
 
-export function generateUsageDisplayCode(config: UsageFeature, colors: boolean, emojis: boolean): string {
+export function generateUsageDisplayCode(config: UsageFeature, emojis: boolean): string {
   if (!config.enabled) return ''
 
   let displayCode = ''
