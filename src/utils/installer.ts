@@ -26,7 +26,7 @@ export async function installStatusline(
   }
 }
 
-async function updateSettingsJson(claudeDir: string, scriptName: string): Promise<void> {
+export async function updateSettingsJson(claudeDir: string, scriptName: string): Promise<void> {
   const settingsPath = path.join(claudeDir, 'settings.json')
   
   try {

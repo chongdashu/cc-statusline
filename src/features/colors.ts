@@ -14,10 +14,28 @@ RST() { :; }
   }
 
   return `
-# ---- color helpers (TTY-aware, respect NO_COLOR) ----
+# ---- color helpers (modern terminal-aware, respect NO_COLOR) ----
 use_color=1
-[ -t 1 ] || use_color=0
+
+# Honor explicit environment variables
 [ -n "$NO_COLOR" ] && use_color=0
+[ -n "$FORCE_COLOR" ] && use_color=1
+
+# Detect modern terminals (more permissive than TTY-only)
+if [ "$use_color" -eq 1 ] && [ -z "$FORCE_COLOR" ]; then
+  # Check for explicit color support indicators
+  case "$TERM" in
+    *color*|*-256color|xterm*|screen*|tmux*) 
+      use_color=1 ;;
+    dumb|unknown) 
+      use_color=0 ;;
+    *) 
+      # Default to colors for modern environments (WSL, containers, etc.)
+      # Only disable if we're definitely not in a capable terminal
+      [ -t 1 ] || use_color=1  # Enable colors even for non-TTY if not explicitly disabled
+      ;;
+  esac
+fi
 
 C() { if [ "$use_color" -eq 1 ]; then printf '\\033[%sm' "$1"; fi; }
 RST() { if [ "$use_color" -eq 1 ]; then printf '\\033[0m'; fi; }

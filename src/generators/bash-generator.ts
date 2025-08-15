@@ -148,6 +148,7 @@ function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageC
   const featurePriority = [
     'directory',  // 1. Where am I?
     'git',        // 2. What branch/commit?
+    'model',      // 3. What model am I using?
     'usage',      // 4. Usage & cost info
     'session',
     'tokens', 
@@ -164,14 +165,18 @@ function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageC
     switch (feature) {
       case 'directory':
         const dirEmoji = emojis ? '📁' : 'dir:'
+        const dirColorPrefix = config.colors ? '$(dir_color)' : ''
+        const dirColorSuffix = config.colors ? '$(rst)' : ''
         displayCode += `
-printf '${dirEmoji} %s%s%s' "$(dir_color)" "$current_dir" "$(rst)"`
+printf '${dirEmoji} %s%s%s' "${dirColorPrefix}" "$current_dir" "${dirColorSuffix}"`
         break
 
       case 'model':
         const modelEmoji = emojis ? '🤖' : 'model:'
+        const modelColorPrefix = config.colors ? '$(model_color)' : ''
+        const modelColorSuffix = config.colors ? '$(rst)' : ''
         displayCode += `
-printf '  ${modelEmoji} %s%s%s' "$(model_color)" "$model_name" "$(rst)"`
+printf '  ${modelEmoji} %s%s%s' "${modelColorPrefix}" "$model_name" "${modelColorSuffix}"`
         break
 
       case 'git':
