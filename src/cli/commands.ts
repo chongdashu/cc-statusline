@@ -58,12 +58,29 @@ export async function initCommand(options: InitOptions): Promise<void> {
     const outputPath = options.output || `./.claude/${filename}`
     const resolvedPath = path.resolve(outputPath)
 
-    // Install the statusline
+    // Always write the script file first
+    const writeSpinner = ora('Writing statusline script...').start()
+    try {
+      // Ensure directory exists and write the script
+      const dir = path.dirname(resolvedPath)
+      const fs = await import('fs/promises')
+      await fs.mkdir(dir, { recursive: true })
+      await fs.writeFile(resolvedPath, script, { mode: 0o755 })
+      writeSpinner.succeed('Statusline script generated!')
+    } catch (error) {
+      writeSpinner.fail('Failed to write statusline script')
+      console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`))
+      process.exit(1)
+    }
+
+    // Handle settings installation if requested
     if (options.install !== false) {
-      const installSpinner = ora('Installing statusline...').start()
+      const installSpinner = ora('Installing statusline configuration...').start()
       
       try {
-        await installStatusline(script, resolvedPath, config)
+        // Only update settings, script is already written
+        const { updateSettingsJson } = await import('../utils/installer.js')
+        await updateSettingsJson(path.dirname(resolvedPath), path.basename(resolvedPath))
         installSpinner.succeed('✅ Statusline installed!')
         
         console.log(chalk.green('\n🎉 Success! Your custom statusline is ready!'))
@@ -73,27 +90,22 @@ export async function initCommand(options: InitOptions): Promise<void> {
         console.log(chalk.white('   2. Usage statistics work via: npx ccusage@latest'))
         
       } catch (error) {
-        installSpinner.fail('Failed to install statusline')
+        installSpinner.fail('Failed to install statusline configuration')
         
-        if (error instanceof Error && error.message === 'SETTINGS_UPDATE_FAILED') {
-          console.log(chalk.yellow('\n⚠️  Settings.json could not be updated automatically.'))
-          console.log(chalk.cyan('\nManual Configuration Required:'))
-          console.log(chalk.white('Add this to your .claude/settings.json file:'))
-          console.log(chalk.gray('\n{'))
-          console.log(chalk.gray('  "statusLine": {'))
-          console.log(chalk.gray('    "type": "command",'))
-          console.log(chalk.gray(`    "command": ".claude/statusline.sh",`))
-          console.log(chalk.gray('    "padding": 0'))
-          console.log(chalk.gray('  }'))
-          console.log(chalk.gray('}'))
-          console.log(chalk.cyan(`\n📁 Statusline script saved to: ${chalk.white(resolvedPath)}`))
-        } else {
-          console.error(chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`))
-          console.log(chalk.cyan(`\n📁 You can manually save the script to: ${chalk.white(resolvedPath)}`))
-        }
+        console.log(chalk.yellow('\n⚠️  Settings.json could not be updated automatically.'))
+        console.log(chalk.cyan('\nManual Configuration Required:'))
+        console.log(chalk.white('Add this to your .claude/settings.json file:'))
+        console.log(chalk.gray('\n{'))
+        console.log(chalk.gray('  "statusLine": {'))
+        console.log(chalk.gray('    "type": "command",'))
+        console.log(chalk.gray(`    "command": ".claude/statusline.sh",`))
+        console.log(chalk.gray('    "padding": 0'))
+        console.log(chalk.gray('  }'))
+        console.log(chalk.gray('}'))
+        console.log(chalk.cyan(`\n📁 Statusline script saved to: ${chalk.white(resolvedPath)}`))
       }
     } else {
-      // Just display where to save it
+      // --no-install: Script is already written, just inform user
       console.log(chalk.green('\n✅ Statusline generated successfully!'))
       console.log(chalk.cyan(`\n📁 Save this script to: ${chalk.white(resolvedPath)}`))
       console.log(chalk.cyan('\nThen restart Claude Code to see your new statusline.'))

@@ -2,51 +2,114 @@ import { StatuslineConfig } from '../cli/prompts.js'
 import { generateColorBashCode, generateBasicColors } from '../features/colors.js'
 import { generateGitBashCode, generateGitDisplayCode, generateGitUtilities } from '../features/git.js'
 import { generateUsageBashCode, generateUsageDisplayCode, generateUsageUtilities } from '../features/usage.js'
+import { cacheManager, generateFeatureHash } from '../utils/cache-manager.js'
+import { generateOptimizedBashStatusline } from './template-cache.js'
+import { optimizeBashCode, getOptimizationStats } from './bash-optimizer.js'
 
 export function generateBashStatusline(config: StatuslineConfig): string {
-  const hasGit = config.features.includes('git')
-  const hasUsage = config.features.some(f => ['usage', 'session', 'tokens', 'burnrate'].includes(f))
-  const hasDirectory = config.features.includes('directory')
-  const hasModel = config.features.includes('model')
-
-  // Build usage feature config
-  const usageConfig = {
-    enabled: hasUsage && config.ccusageIntegration,
-    showCost: config.features.includes('usage'),
-    showTokens: config.features.includes('tokens'),
-    showBurnRate: config.features.includes('burnrate'),
-    showSession: config.features.includes('session'),
-    showProgressBar: config.theme !== 'minimal' && config.features.includes('session')
+  const startTime = Date.now()
+  
+  // Use the new optimized template cache system first
+  const cachedScript = generateOptimizedBashStatusline(config)
+  if (cachedScript) {
+    // Update performance metrics
+    const generationTime = Date.now() - startTime
+    cacheManager.updateMetrics({
+      scriptSize: cachedScript.length,
+      generationTime,
+      featureComplexity: config.features.length
+    })
+    return cachedScript
+  }
+  
+  // Fallback to original template-level caching for edge cases
+  const templateHash = generateFeatureHash(config.features, {
+    colors: config.colors,
+    theme: config.theme,
+    ccusageIntegration: config.ccusageIntegration,
+    customEmojis: config.customEmojis,
+    logging: config.logging
+  })
+  const templateCacheKey = cacheManager.generateCacheKey('template', templateHash)
+  
+  // Check memory cache for complete script
+  const memoryScript = cacheManager.getFromMemory<string>(templateCacheKey)
+  if (memoryScript) {
+    return memoryScript
   }
 
-  // Build git feature config
+  // Pre-compute feature flags for better performance
+  const features = new Set(config.features)
+  const hasGit = features.has('git')
+  const hasUsage = features.has('usage') || features.has('session') || features.has('tokens') || features.has('burnrate')
+  const hasDirectory = features.has('directory')
+  const hasModel = features.has('model')
+
+  // Build feature configs once
+  const usageConfig = {
+    enabled: hasUsage && config.ccusageIntegration,
+    showCost: features.has('usage'),
+    showTokens: features.has('tokens'),
+    showBurnRate: features.has('burnrate'),
+    showSession: features.has('session'),
+    showProgressBar: config.theme !== 'minimal' && features.has('session')
+  }
+
   const gitConfig = {
     enabled: hasGit,
     showBranch: hasGit,
-    showChanges: false, // Removed delta changes per user request
+    showChanges: false,
     compactMode: config.theme === 'compact'
   }
 
+  // Use array for better performance than string concatenation
+  const parts: string[] = [
+    generateScriptHeader(config),
+    config.logging ? generateLoggingCode() : '',
+    'input=$(cat)',
+    generateColorBashCode({ enabled: config.colors, theme: config.theme }),
+    config.colors ? generateBasicColors() : '',
+    hasUsage ? generateUsageUtilities() : '',
+    hasGit ? generateGitUtilities() : '',
+    generateBasicDataExtraction(hasDirectory, hasModel),
+    hasGit ? generateGitBashCode(gitConfig, config.colors) : '',
+    hasUsage ? generateUsageBashCode(usageConfig, config.colors) : '',
+    config.logging ? generateLoggingOutput() : '',
+    generateDisplaySection(config, gitConfig, usageConfig)
+  ]
+
+  // Filter empty parts and join efficiently
+  const rawScript = parts.filter(Boolean).join('\n') + '\n'
+  
+  // Apply final micro-optimizations to the complete script
+  const optimizedScript = optimizeBashCode(rawScript)
+  
+  // Get optimization statistics for performance monitoring
+  const stats = getOptimizationStats(rawScript, optimizedScript)
+  
+  // Cache the optimized script and update performance metrics
+  const generationTime = Date.now() - startTime
+  cacheManager.setInMemory(templateCacheKey, optimizedScript, 'template', templateHash)
+  cacheManager.updateMetrics({
+    scriptSize: optimizedScript.length,
+    generationTime,
+    featureComplexity: config.features.length
+  })
+  
+  // Log optimization results if in debug mode
+  if (process.env.CC_STATUSLINE_DEBUG === '1') {
+    console.log(`Script optimization: ${stats.reductionPercent}% size reduction (${stats.originalSize} → ${stats.optimizedSize} bytes)`)
+  }
+  
+  return optimizedScript
+}
+
+function generateScriptHeader(config: StatuslineConfig): string {
   const timestamp = new Date().toISOString()
-  const script = `#!/bin/bash
+  return `#!/bin/bash
 # Generated by cc-statusline (https://www.npmjs.com/package/@chongdashu/cc-statusline)
 # Custom Claude Code statusline - Created: ${timestamp}
-# Theme: ${config.theme} | Colors: ${config.colors} | Features: ${config.features.join(', ')}
-
-${config.logging ? generateLoggingCode() : ''}
-input=$(cat)
-${generateColorBashCode({ enabled: config.colors, theme: config.theme })}
-${config.colors ? generateBasicColors() : ''}
-${hasUsage ? generateUsageUtilities() : ''}
-${hasGit ? generateGitUtilities() : ''}
-${generateBasicDataExtraction(hasDirectory, hasModel)}
-${hasGit ? generateGitBashCode(gitConfig, config.colors) : ''}
-${hasUsage ? generateUsageBashCode(usageConfig, config.colors) : ''}
-${config.logging ? generateLoggingOutput() : ''}
-${generateDisplaySection(config, gitConfig, usageConfig)}
-`
-
-  return script.replace(/\n\n\n+/g, '\n\n').trim() + '\n'
+# Theme: ${config.theme} | Colors: ${config.colors} | Features: ${config.features.join(', ')}`
 }
 
 function generateLoggingCode(): string {
@@ -64,56 +127,103 @@ TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 }
 
 function generateBasicDataExtraction(hasDirectory: boolean, hasModel: boolean): string {
-  return `
+  // Optimize JSON parsing with single jq call when possible
+  if (!hasDirectory && !hasModel) return ''
+  
+  const jqFields: string[] = []
+  const fallbackVars: string[] = []
+  
+  if (hasDirectory) {
+    jqFields.push('cwd: (.workspace.current_dir // .cwd // "unknown")')
+    fallbackVars.push('cwd="unknown"')
+  }
+  
+  if (hasModel) {
+    jqFields.push('model_name: (.model.display_name // "Claude")')
+    jqFields.push('model_version: (.model.version // "")')
+    fallbackVars.push('model_name="Claude"; model_version=""')
+  }
+
+  const jqQuery = `{${jqFields.join(', ')}}`
+  
+  const bashCode = `
 # ---- basics ----
-if command -v jq >/dev/null 2>&1; then${hasDirectory ? `
-  current_dir=$(echo "$input" | jq -r '.workspace.current_dir // .cwd // "unknown"' 2>/dev/null | sed "s|^$HOME|~|g")` : ''}${hasModel ? `
-  model_name=$(echo "$input" | jq -r '.model.display_name // "Claude"' 2>/dev/null)
-  model_version=$(echo "$input" | jq -r '.model.version // ""' 2>/dev/null)` : ''}
-else${hasDirectory ? `
-  current_dir="unknown"` : ''}${hasModel ? `
-  model_name="Claude"; model_version=""` : ''}
+if command -v jq >/dev/null 2>&1; then
+  eval "$(echo "$input" | jq -r '${jqQuery} | to_entries | .[] | "\\(.key)=\\(.value | @sh)"' 2>/dev/null)"${hasDirectory ? `
+  cwd=\${cwd/#$HOME/~}` : ''}
+else
+  ${fallbackVars.join('; ')}
 fi
 `
+
+  return optimizeBashCode(bashCode)
 }
 
 function generateLoggingOutput(): string {
-  return `
+  const bashCode = `
 # ---- log extracted data ----
 {
-  echo "[\$TIMESTAMP] Extracted: dir=\${current_dir:-}, model=\${model_name:-}, version=\${model_version:-}, git=\${git_branch:-}, cost=\${cost_usd:-}, cost_ph=\${cost_per_hour:-}, tokens=\${tot_tokens:-}, tpm=\${tpm:-}, session_pct=\${session_pct:-}"
+  echo "[\$TIMESTAMP] Extracted: dir=\${cwd:-}, model=\${model_name:-}, version=\${model_version:-}, git=\${git_branch:-}, cost=\${cost_usd:-}, cost_ph=\${cost_ph:-}, tokens=\${tot_tokens:-}, tpm=\${tpm:-}, pct=\${pct:-}"
 } >> "$LOG_FILE" 2>/dev/null
 `
+
+  return optimizeBashCode(bashCode)
 }
 
 function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageConfig: any): string {
   const emojis = config.colors && !config.customEmojis
+  const features = new Set(config.features)
+
+  // Logical feature ordering (grouped by context)
+  const featurePriority = [
+    'directory',  // 1. Where am I?
+    'git',        // 2. What branch/commit?
+    'model',      // 3. What model am I using?
+    'usage',      // 4. Usage & cost info
+    'session',
+    'tokens', 
+    'burnrate'
+  ]
 
   let displayCode = `
 # ---- render statusline ----`
 
-  // Directory
-  if (config.features.includes('directory')) {
-    const dirEmoji = emojis ? '📁' : 'dir:'
-    displayCode += `
-printf '${dirEmoji} %s%s%s' "$(dir_color)" "$current_dir" "$(rst)"`
+  // Render features in priority order
+  for (const feature of featurePriority) {
+    if (!features.has(feature)) continue
+
+    switch (feature) {
+      case 'directory':
+        const dirEmoji = emojis ? '📁' : 'dir:'
+        const dirColorPrefix = config.colors ? '$(dir_clr)' : ''
+        const dirColorSuffix = config.colors ? '$(rst)' : ''
+        displayCode += `
+printf '${dirEmoji} %s%s%s' "${dirColorPrefix}" "$cwd" "${dirColorSuffix}"`
+        break
+
+      case 'model':
+        const modelEmoji = emojis ? '🤖' : 'model:'
+        const modelColorPrefix = config.colors ? '$(model_clr)' : ''
+        const modelColorSuffix = config.colors ? '$(rst)' : ''
+        displayCode += `
+printf '  ${modelEmoji} %s%s%s' "${modelColorPrefix}" "$model_name" "${modelColorSuffix}"`
+        break
+
+      case 'git':
+        displayCode += generateGitDisplayCode(gitConfig, config.colors, emojis)
+        break
+
+      case 'usage':
+      case 'session':
+      case 'tokens':
+      case 'burnrate':
+        // Only add usage display once
+        if (feature === 'usage' || (!features.has('usage') && feature === 'session')) {
+          displayCode += generateUsageDisplayCode(usageConfig, emojis)
+        }
+        break
+    }
   }
 
-  // Git
-  displayCode += generateGitDisplayCode(gitConfig, config.colors, emojis)
-
-  // Model
-  if (config.features.includes('model')) {
-    const modelEmoji = emojis ? '🤖' : 'model:'
-    displayCode += `
-printf '  ${modelEmoji} %s%s%s' "$(model_color)" "$model_name" "$(rst)"
-if [ -n "$model_version" ] && [ "$model_version" != "null" ]; then
-  printf '  🏷️ %s%s%s' "$(version_color)" "$model_version" "$(rst)"
-fi`
-  }
-
-  // Usage features
-  displayCode += generateUsageDisplayCode(usageConfig, config.colors, emojis)
-
-  return displayCode
+  return optimizeBashCode(displayCode)
 }
