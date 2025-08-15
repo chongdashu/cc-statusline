@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
 
 export interface CacheKey {
-  type: 'ccusage' | 'git' | 'template'
+  type: 'ccusage' | 'git' | 'template' | 'template_fragment' | 'template_combination'
   context: string  // pwd hash for git, features hash for template
   timestamp: number
 }
@@ -17,6 +17,8 @@ export interface CacheConfig {
   memoryTTL: number     // Memory cache TTL in milliseconds (default: 5000)
   fileTTL: number       // File cache TTL in seconds (default: 30-300)
   maxMemoryEntries: number  // Max entries in memory cache (default: 100)
+  templateFragmentTTL: number // Template fragment cache TTL (default: 300000 = 5 minutes)
+  templateCombinationTTL: number // Template combination cache TTL (default: 60000 = 1 minute)
 }
 
 export interface OptimizationMetrics {
@@ -41,6 +43,8 @@ export class CacheManager {
       memoryTTL: 5000,        // 5 seconds memory cache
       fileTTL: 30,            // 30 seconds file cache (matches current usage.ts)
       maxMemoryEntries: 100,
+      templateFragmentTTL: 300000,    // 5 minutes for template fragments (rarely change)
+      templateCombinationTTL: 60000,  // 1 minute for template combinations
       ...config
     }
     
@@ -83,10 +87,18 @@ export class CacheManager {
       this.cleanupMemoryCache()
     }
 
+    // Use different TTL based on cache type
+    let ttl = this.config.memoryTTL
+    if (type === 'template_fragment') {
+      ttl = this.config.templateFragmentTTL
+    } else if (type === 'template_combination') {
+      ttl = this.config.templateCombinationTTL
+    }
+
     const cacheEntry: CacheEntry<T> = {
       key: { type, context, timestamp: Date.now() },
       value,
-      expiry: Date.now() + this.config.memoryTTL,
+      expiry: Date.now() + ttl,
       hits: 0
     }
     
@@ -227,6 +239,40 @@ fi`
    */
   updateMetrics(updates: Partial<OptimizationMetrics>): void {
     this.metrics = { ...this.metrics, ...updates }
+  }
+
+  /**
+   * Get template-specific cache statistics for monitoring
+   */
+  getTemplateCacheStats() {
+    const fragmentEntries = Array.from(this.memoryCache.values()).filter(entry => entry.key.type === 'template_fragment')
+    const combinationEntries = Array.from(this.memoryCache.values()).filter(entry => entry.key.type === 'template_combination')
+    const templateEntries = Array.from(this.memoryCache.values()).filter(entry => entry.key.type === 'template')
+    
+    return {
+      fragmentCount: fragmentEntries.length,
+      combinationCount: combinationEntries.length,
+      templateCount: templateEntries.length,
+      fragmentHits: fragmentEntries.reduce((sum, entry) => sum + entry.hits, 0),
+      combinationHits: combinationEntries.reduce((sum, entry) => sum + entry.hits, 0),
+      templateHits: templateEntries.reduce((sum, entry) => sum + entry.hits, 0),
+      totalTemplateRelatedEntries: fragmentEntries.length + combinationEntries.length + templateEntries.length
+    }
+  }
+
+  /**
+   * Invalidate template-related caches (useful when updating template system)
+   */
+  invalidateTemplateCaches(): void {
+    const toDelete: string[] = []
+    
+    for (const [key, entry] of this.memoryCache.entries()) {
+      if (entry.key.type.startsWith('template')) {
+        toDelete.push(key)
+      }
+    }
+    
+    toDelete.forEach(key => this.memoryCache.delete(key))
   }
 }
 

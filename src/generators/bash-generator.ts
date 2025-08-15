@@ -3,11 +3,25 @@ import { generateColorBashCode, generateBasicColors } from '../features/colors.j
 import { generateGitBashCode, generateGitDisplayCode, generateGitUtilities } from '../features/git.js'
 import { generateUsageBashCode, generateUsageDisplayCode, generateUsageUtilities } from '../features/usage.js'
 import { cacheManager, generateFeatureHash } from '../utils/cache-manager.js'
+import { generateOptimizedBashStatusline } from './template-cache.js'
 
 export function generateBashStatusline(config: StatuslineConfig): string {
   const startTime = Date.now()
   
-  // Template-level caching - check if we've generated this exact configuration before
+  // Use the new optimized template cache system first
+  const optimizedScript = generateOptimizedBashStatusline(config)
+  if (optimizedScript) {
+    // Update performance metrics
+    const generationTime = Date.now() - startTime
+    cacheManager.updateMetrics({
+      scriptSize: optimizedScript.length,
+      generationTime,
+      featureComplexity: config.features.length
+    })
+    return optimizedScript
+  }
+  
+  // Fallback to original template-level caching for edge cases
   const templateHash = generateFeatureHash(config.features, {
     colors: config.colors,
     theme: config.theme,
