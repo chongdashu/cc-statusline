@@ -1,3 +1,5 @@
+import { cacheManager, generateContextHash } from '../utils/cache-manager.js'
+
 export interface UsageFeature {
   enabled: boolean
   showCost: boolean
@@ -9,6 +11,19 @@ export interface UsageFeature {
 
 export function generateUsageBashCode(config: UsageFeature, colors: boolean): string {
   if (!config.enabled) return ''
+
+  // Generate cache context for memory caching
+  const cacheContext = generateContextHash(
+    JSON.stringify(config),
+    colors.toString()
+  )
+  const cacheKey = cacheManager.generateCacheKey('ccusage', cacheContext)
+
+  // Check memory cache first
+  const cachedResult = cacheManager.getFromMemory<string>(cacheKey)
+  if (cachedResult) {
+    return cachedResult
+  }
 
   // Build optimized jq query fields
   const jqFields: string[] = []
@@ -46,32 +61,16 @@ cost_color() { :; }
 session_color() { :; }
 `
 
-  return `${colorCode}
+  const bashCode = `${colorCode}
 # ---- ccusage integration ----
 session_txt=""; session_pct=0; session_bar=""
 cost_usd=""; cost_per_hour=""; tpm=""; tot_tokens=""
 
 if command -v jq >/dev/null 2>&1; then
-  # Try cache first (valid for 30 seconds)
-  cache_file="\${HOME}/.claude/ccusage_cache.json"
-  cache_age=30
-  use_cache=0
+${cacheManager.generateFileCacheCode('ccusage', 'ccusage blocks --json 2>/dev/null || timeout 3 npx ccusage@latest blocks --json 2>/dev/null')}
   
-  if [ -f "$cache_file" ] && [ $(($(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo 0))) -lt $cache_age ]; then
-    use_cache=1
-    blocks_output=$(cat "$cache_file" 2>/dev/null)
-  fi
-  
-  if [ $use_cache -eq 0 ]; then
-    # Try local ccusage first, fallback to npx
-    blocks_output=$(ccusage blocks --json 2>/dev/null || timeout 3 npx ccusage@latest blocks --json 2>/dev/null)
-    if [ -n "$blocks_output" ]; then
-      mkdir -p "\${HOME}/.claude" 2>/dev/null
-      echo "$blocks_output" > "$cache_file" 2>/dev/null
-    fi
-  fi
-  
-  if [ -n "$blocks_output" ]; then
+  if [ -n "$cached_result" ]; then
+    blocks_output="$cached_result"
     # Single optimized jq call for all data extraction
     eval "$(echo "$blocks_output" | jq -r '
       .blocks[] | select(.isActive == true) | 
@@ -93,6 +92,11 @@ if command -v jq >/dev/null 2>&1; then
     fi` : ''}
   fi
 fi`
+
+  // Cache the generated bash code in memory
+  cacheManager.setInMemory(cacheKey, bashCode, 'ccusage', cacheContext)
+  
+  return bashCode
 }
 
 export function generateUsageUtilities(): string {

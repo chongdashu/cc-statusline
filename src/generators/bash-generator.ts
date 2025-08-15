@@ -2,8 +2,27 @@ import { StatuslineConfig } from '../cli/prompts.js'
 import { generateColorBashCode, generateBasicColors } from '../features/colors.js'
 import { generateGitBashCode, generateGitDisplayCode, generateGitUtilities } from '../features/git.js'
 import { generateUsageBashCode, generateUsageDisplayCode, generateUsageUtilities } from '../features/usage.js'
+import { cacheManager, generateFeatureHash } from '../utils/cache-manager.js'
 
 export function generateBashStatusline(config: StatuslineConfig): string {
+  const startTime = Date.now()
+  
+  // Template-level caching - check if we've generated this exact configuration before
+  const templateHash = generateFeatureHash(config.features, {
+    colors: config.colors,
+    theme: config.theme,
+    ccusageIntegration: config.ccusageIntegration,
+    customEmojis: config.customEmojis,
+    logging: config.logging
+  })
+  const templateCacheKey = cacheManager.generateCacheKey('template', templateHash)
+  
+  // Check memory cache for complete script
+  const cachedScript = cacheManager.getFromMemory<string>(templateCacheKey)
+  if (cachedScript) {
+    return cachedScript
+  }
+
   // Pre-compute feature flags for better performance
   const features = new Set(config.features)
   const hasGit = features.has('git')
@@ -45,7 +64,18 @@ export function generateBashStatusline(config: StatuslineConfig): string {
   ]
 
   // Filter empty parts and join efficiently
-  return parts.filter(Boolean).join('\n') + '\n'
+  const generatedScript = parts.filter(Boolean).join('\n') + '\n'
+  
+  // Cache the generated script and update performance metrics
+  const generationTime = Date.now() - startTime
+  cacheManager.setInMemory(templateCacheKey, generatedScript, 'template', templateHash)
+  cacheManager.updateMetrics({
+    scriptSize: generatedScript.length,
+    generationTime,
+    featureComplexity: config.features.length
+  })
+  
+  return generatedScript
 }
 
 function generateScriptHeader(config: StatuslineConfig): string {
