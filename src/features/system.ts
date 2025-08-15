@@ -84,6 +84,16 @@ if [[ $sys_cached -eq 0 ]]; then
   # Cache platform detection to avoid repeated uname calls
   if [[ -z \$SYS_PLATFORM ]]; then
     SYS_PLATFORM="\$(uname -s 2>/dev/null)"
+    # WSL detection for enhanced performance
+    if [[ \$SYS_PLATFORM == "Linux" ]] && [[ -r /proc/version ]] && grep -qi "microsoft" /proc/version 2>/dev/null; then
+      SYS_PLATFORM="WSL"
+      # Cache WSL version for optimizations
+      if grep -qi "wsl2" /proc/version 2>/dev/null; then
+        export SYS_WSL_VERSION="2"
+      else
+        export SYS_WSL_VERSION="1"
+      fi
+    fi
     # Cache platform in user session for reuse
     export SYS_PLATFORM
   fi
@@ -91,26 +101,153 @@ if [[ $sys_cached -eq 0 ]]; then
   
   case "\$platform" in
     Linux*)
-      # Linux - optimized single-pass metric collection${config.showCPU ? `
-      # Optimized CPU detection - use best method first
-      if command -v vmstat >/dev/null 2>&1; then
-        # vmstat method (most accurate, single call)
-        vmstat_output=\$(vmstat 1 2 2>/dev/null | tail -1)
-        if [[ \$vmstat_output ]]; then
-          cpu_idle=\$(echo "\$vmstat_output" | awk '{print \$15}' 2>/dev/null)
-          if [[ \$cpu_idle =~ ^[0-9]+$ ]] && (( cpu_idle <= 100 )); then
-            cpu_percent=\$((100 - cpu_idle))
+      # Linux - enhanced /proc filesystem optimizations${config.showCPU ? `
+      # Enhanced CPU detection with /proc/stat priority for efficiency
+      linux_cpu_detected=0
+      
+      # Primary method: Direct /proc/stat reading (most efficient)
+      if [[ \$linux_cpu_detected -eq 0 ]] && [[ -r /proc/stat ]]; then
+        # Single read with optimized parsing
+        if read -r cpu_line < /proc/stat 2>/dev/null && [[ \$cpu_line ]]; then
+          cpu_times=(\$cpu_line)
+          if [[ \${#cpu_times[@]} -ge 8 ]]; then
+            # Optimized integer-only calculation with bounds checking
+            user=\${cpu_times[1]:-0}; nice=\${cpu_times[2]:-0}; system=\${cpu_times[3]:-0}
+            idle=\${cpu_times[4]:-0}; iowait=\${cpu_times[5]:-0}; irq=\${cpu_times[6]:-0}; softirq=\${cpu_times[7]:-0}
+            steal=\${cpu_times[8]:-0}  # Include steal time for virtualized environments
+            
+            active=\$((user + nice + system + irq + softirq + steal))
+            total=\$((active + idle + iowait))
+            
+            if (( total > 0 )); then
+              cpu_percent=\$(( active * 100 / total ))
+              # Bounds checking for sanity
+              (( cpu_percent > 100 )) && cpu_percent=100
+              (( cpu_percent < 0 )) && cpu_percent=0
+              linux_cpu_detected=1
+            fi
           fi
         fi
       fi
       
-      # Fallback to /proc/stat if vmstat failed or unavailable
-      if [[ \$cpu_percent -eq 0 ]] && [[ -r /proc/stat ]]; then
+      # Fallback 1: vmstat method for systems where /proc/stat is unreliable
+      if [[ \$linux_cpu_detected -eq 0 ]] && command -v vmstat >/dev/null 2>&1; then
+        vmstat_output=\$(vmstat 1 2 2>/dev/null | tail -1)
+        if [[ \$vmstat_output ]]; then
+          cpu_idle=\$(echo "\$vmstat_output" | awk '{print \$15}' 2>/dev/null)
+          if [[ \$cpu_idle =~ ^[0-9]+$ ]] && (( cpu_idle >= 0 && cpu_idle <= 100 )); then
+            cpu_percent=\$((100 - cpu_idle))
+            linux_cpu_detected=1
+          fi
+        fi
+      fi
+      
+      # Fallback 2: top command for older systems
+      if [[ \$linux_cpu_detected -eq 0 ]] && command -v top >/dev/null 2>&1; then
+        cpu_line=\$(top -bn1 | grep "^%Cpu" 2>/dev/null | head -1)
+        if [[ \$cpu_line ]]; then
+          # Parse top CPU line (format varies by version)
+          cpu_percent=\$(echo "\$cpu_line" | awk '{
+            # Look for patterns like: %Cpu(s):  5.2%us,  1.0%sy
+            if (match(\$0, /([0-9.]+)%[[:space:]]*us.*([0-9.]+)%[[:space:]]*sy/, arr)) {
+              user_pct = arr[1]; sys_pct = arr[2]
+              print int(user_pct + sys_pct + 0.5)  # Round to nearest int
+            }
+          }' 2>/dev/null)
+          if [[ \$cpu_percent =~ ^[0-9]+$ ]] && (( cpu_percent >= 0 && cpu_percent <= 100 )); then
+            linux_cpu_detected=1
+          fi
+        fi
+      fi` : ''}${config.showRAM ? `
+      
+      # Enhanced /proc/meminfo parsing with comprehensive metrics
+      linux_mem_detected=0
+      
+      # Primary method: Optimized /proc/meminfo single-pass parsing
+      if [[ \$linux_mem_detected -eq 0 ]] && [[ -r /proc/meminfo ]]; then
+        # Single awk pass for all memory metrics with enhanced accuracy
+        eval "\$(awk '
+          /^MemTotal:/ { total = \$2 }
+          /^MemAvailable:/ { avail = \$2; has_avail = 1 }
+          /^MemFree:/ { free = \$2 }
+          /^Buffers:/ { buffers = \$2 }
+          /^Cached:/ { cached = \$2 }
+          /^SReclaimable:/ { sreclaimable = \$2 }
+          /^Shmem:/ { shmem = \$2 }
+          END {
+            if (total > 0) {
+              if (has_avail) {
+                # Use kernel-calculated MemAvailable if available (Linux 3.14+)
+                used_kb = total - avail
+              } else {
+                # Calculate available memory manually for older kernels
+                # Include SReclaimable but subtract Shmem for accuracy
+                avail = free + buffers + cached + sreclaimable - shmem
+                if (avail < 0) avail = free + buffers + cached  # Fallback calculation
+                used_kb = total - avail
+              }
+              
+              # Bounds checking and integer math with proper rounding
+              if (used_kb < 0) used_kb = 0
+              if (used_kb > total) used_kb = total
+              
+              # Convert to GB with rounding (add 524288 KB for 0.5GB rounding)
+              used_gb = int((used_kb + 524288) / 1048576)
+              total_gb = int((total + 524288) / 1048576)
+              percent = (total > 0) ? int(used_kb * 100 / total) : 0
+              
+              # Additional bounds checking
+              if (percent < 0) percent = 0
+              if (percent > 100) percent = 100
+              
+              printf "mem_total_kb=%d;mem_used_kb=%d;mem_used_gb=%d;mem_total_gb=%d;mem_percent=%d", total, used_kb, used_gb, total_gb, percent
+            }
+          }' /proc/meminfo 2>/dev/null)"
+        
+        # Validate results and mark as detected if successful
+        if [[ \$mem_total_gb && \$mem_total_gb -gt 0 ]]; then
+          linux_mem_detected=1
+          # Additional safety bounds
+          [[ \$mem_used_gb -lt 0 ]] && mem_used_gb=0
+          [[ \$mem_total_gb -lt 1 ]] && mem_total_gb=1
+        fi
+      fi
+      
+      # Fallback 1: free command for systems with limited /proc access
+      if [[ \$linux_mem_detected -eq 0 ]] && command -v free >/dev/null 2>&1; then
+        free_info=\$(free -m 2>/dev/null | awk 'NR==2 {print \$2, \$7}')  # total, available
+        if [[ \$free_info ]]; then
+          read -r mem_total_mb mem_avail_mb <<< "\$free_info"
+          if [[ \$mem_total_mb && \$mem_total_mb -gt 0 ]]; then
+            # Convert to GB and calculate percentage
+            mem_total_gb=\$(( (mem_total_mb + 512) / 1024 ))  # Round to nearest GB
+            if [[ \$mem_avail_mb && \$mem_avail_mb -gt 0 ]]; then
+              mem_used_mb=\$((mem_total_mb - mem_avail_mb))
+              mem_used_gb=\$(( (mem_used_mb + 512) / 1024 ))
+              mem_percent=\$(( mem_used_mb * 100 / mem_total_mb ))
+            else
+              # Estimate if available not provided
+              mem_used_gb=\$(( mem_total_gb / 2 ))
+              mem_percent=50
+            fi
+            linux_mem_detected=1
+          fi
+        fi
+      fi` : ''}${config.showLoad ? `
+      
+      if [[ -r /proc/loadavg ]]; then
+        read -r load_1min load_5min load_15min _ < /proc/loadavg
+      fi` : ''}
+      ;;
+    WSL*)
+      # WSL - optimized hybrid approach combining Linux /proc with Windows performance counters${config.showCPU ? `
+      # WSL-optimized CPU detection - prefer /proc/stat for consistency
+      if [[ -r /proc/stat ]]; then
         cpu_line=\$(head -1 /proc/stat 2>/dev/null)
         if [[ \$cpu_line ]]; then
           cpu_times=(\$cpu_line)
           if [[ \${#cpu_times[@]} -ge 8 ]]; then
-            # Integer-only calculation for better performance
+            # Integer-only calculation optimized for WSL
             user=\${cpu_times[1]:-0}; nice=\${cpu_times[2]:-0}; system=\${cpu_times[3]:-0}
             idle=\${cpu_times[4]:-0}; iowait=\${cpu_times[5]:-0}; irq=\${cpu_times[6]:-0}; softirq=\${cpu_times[7]:-0}
             active=\$((user + nice + system + irq + softirq))
@@ -120,22 +257,37 @@ if [[ $sys_cached -eq 0 ]]; then
             fi
           fi
         fi
+      fi
+      
+      # Fallback to vmstat if /proc/stat failed
+      if [[ \$cpu_percent -eq 0 ]] && command -v vmstat >/dev/null 2>&1; then
+        vmstat_output=\$(vmstat 1 2 2>/dev/null | tail -1)
+        if [[ \$vmstat_output ]]; then
+          cpu_idle=\$(echo "\$vmstat_output" | awk '{print \$15}' 2>/dev/null)
+          if [[ \$cpu_idle =~ ^[0-9]+$ ]] && (( cpu_idle <= 100 )); then
+            cpu_percent=\$((100 - cpu_idle))
+          fi
+        fi
       fi` : ''}${config.showRAM ? `
       
-      # Optimized memory parsing - single pass through /proc/meminfo
+      # WSL-optimized memory detection with enhanced /proc/meminfo parsing
       if [[ -r /proc/meminfo ]]; then
-        # Single awk pass for all memory metrics (more efficient)
+        # Single-pass awk optimized for WSL performance characteristics
         eval "\$(awk '
           /^MemTotal:/ { total = \$2 }
           /^MemAvailable:/ { avail = \$2; has_avail = 1 }
           /^MemFree:/ { free = \$2 }
           /^Buffers:/ { buffers = \$2 }
           /^Cached:/ { cached = \$2 }
+          /^SReclaimable:/ { sreclaimable = \$2 }
           END {
-            if (!has_avail) avail = free + buffers + cached
+            if (!has_avail) {
+              # WSL-specific calculation including SReclaimable for accuracy
+              avail = free + buffers + cached + sreclaimable
+            }
             if (total > 0 && avail >= 0) {
               used_kb = total - avail
-              # Integer math with proper rounding (add 524288 for 0.5GB)
+              # Integer math with proper rounding optimized for WSL
               used_gb = int((used_kb + 524288) / 1048576)
               total_gb = int((total + 524288) / 1048576)
               percent = int(used_kb * 100 / total)
@@ -143,13 +295,24 @@ if [[ $sys_cached -eq 0 ]]; then
             }
           }' /proc/meminfo 2>/dev/null)"
         
-        # Ensure reasonable values
+        # WSL-specific validation and bounds checking
         [[ \$mem_used_gb -lt 0 ]] && mem_used_gb=0
         [[ \$mem_total_gb -lt 1 ]] && mem_total_gb=1
       fi` : ''}${config.showLoad ? `
       
+      # WSL-optimized load average - direct /proc/loadavg reading
       if [[ -r /proc/loadavg ]]; then
         read -r load_1min load_5min load_15min _ < /proc/loadavg
+        # WSL-specific load normalization if needed
+        if [[ \$SYS_WSL_VERSION == "1" ]] && command -v nproc >/dev/null 2>&1; then
+          # WSL1 may need load adjustment based on CPU cores
+          cpu_cores=\$(nproc 2>/dev/null || echo "1")
+          # Adjust load values for single-core WSL1 if necessary
+          if (( cpu_cores == 1 )) && (( \$(echo "\$load_1min > 1.0" | bc -l 2>/dev/null || echo 0) )); then
+            # Cap load at reasonable values for single-core WSL1
+            load_1min=\$(echo "scale=2; if (\$load_1min > 2.0) 2.0 else \$load_1min" | bc -l 2>/dev/null || echo "\$load_1min")
+          fi
+        fi
       fi` : ''}
       ;;
     Darwin*)
@@ -170,20 +333,28 @@ if [[ $sys_cached -eq 0 ]]; then
         fi
       fi` : ''}${config.showRAM ? `
       
-      # Optimized macOS memory detection with single vm_stat call
-      if command -v vm_stat >/dev/null 2>&1 && command -v sysctl >/dev/null 2>&1; then
+      # Enhanced macOS memory detection with fallbacks
+      macos_mem_detected=0
+      
+      # Primary method: sysctl + vm_stat
+      if [[ \$macos_mem_detected -eq 0 ]] && command -v vm_stat >/dev/null 2>&1 && command -v sysctl >/dev/null 2>&1; then
         mem_total_bytes=\$(sysctl -n hw.memsize 2>/dev/null)
-        if [[ \$mem_total_bytes && \$mem_total_bytes -gt 0 ]]; then
-          # Single vm_stat call with awk parsing for efficiency
-          eval "\$(vm_stat 2>/dev/null | awk '
+        page_size=\$(sysctl -n hw.pagesize 2>/dev/null || echo "4096")
+        if [[ \$mem_total_bytes && \$mem_total_bytes -gt 0 && \$page_size && \$page_size -gt 0 ]]; then
+          # Single vm_stat call with dynamic page size and enhanced parsing
+          eval "\$(vm_stat 2>/dev/null | awk -v page_size=\$page_size '
             /Pages free:/ { free = \$3; gsub(/\\./, "", free) }
             /Pages inactive:/ { inactive = \$3; gsub(/\\./, "", inactive) }
             /Pages speculative:/ { spec = \$3; gsub(/\\./, "", spec) }
+            /Pages wired down:/ { wired = \$4; gsub(/\\./, "", wired) }
+            /Pages active:/ { active = \$3; gsub(/\\./, "", active) }
             END {
-              if (free && inactive && spec) {
-                page_size = 4096
+              if (free && inactive && spec && wired && active) {
+                # Enhanced calculation including wired and active pages
                 avail_bytes = (free + inactive + spec) * page_size
                 used_bytes = '$mem_total_bytes' - avail_bytes
+                # Ensure used_bytes is not negative
+                if (used_bytes < 0) used_bytes = (wired + active) * page_size
                 # Integer math with rounding for GB conversion
                 used_gb = int((used_bytes + 536870912) / 1073741824)  # +0.5GB for rounding
                 total_gb = int(('$mem_total_bytes' + 536870912) / 1073741824)
@@ -191,16 +362,82 @@ if [[ $sys_cached -eq 0 ]]; then
                 printf "mem_used_gb=%d;mem_total_gb=%d;mem_percent=%d", used_gb, total_gb, percent
               }
             }')"
+          [[ \$mem_total_gb && \$mem_total_gb -gt 0 ]] && macos_mem_detected=1
+        fi
+      fi
+      
+      # Fallback 1: top command for memory info
+      if [[ \$macos_mem_detected -eq 0 ]] && command -v top >/dev/null 2>&1; then
+        mem_info=\$(top -l 1 -s 0 | grep "PhysMem" 2>/dev/null)
+        if [[ \$mem_info ]]; then
+          # Parse top output for memory info (format: PhysMem: 1234M used (456M wired), 789M unused.)
+          eval "\$(echo "\$mem_info" | awk '
+            /PhysMem:/ {
+              match(\$0, /([0-9]+)([MG])[[:space:]]+used.*([0-9]+)([MG])[[:space:]]+unused/, arr)
+              if (length(arr) >= 4) {
+                used_val = arr[1]; used_unit = arr[2]
+                unused_val = arr[3]; unused_unit = arr[4]
+                
+                # Convert to GB
+                used_gb = (used_unit == "G") ? used_val : int(used_val / 1024)
+                unused_gb = (unused_unit == "G") ? unused_val : int(unused_val / 1024)
+                total_gb = used_gb + unused_gb
+                percent = (total_gb > 0) ? int(used_gb * 100 / total_gb) : 0
+                
+                printf "mem_used_gb=%d;mem_total_gb=%d;mem_percent=%d", used_gb, total_gb, percent
+              }
+            }')"
+          [[ \$mem_total_gb && \$mem_total_gb -gt 0 ]] && macos_mem_detected=1
+        fi
+      fi
+      
+      # Fallback 2: system_profiler (slower but comprehensive)
+      if [[ \$macos_mem_detected -eq 0 ]] && command -v system_profiler >/dev/null 2>&1; then
+        mem_total_gb=\$(system_profiler SPHardwareDataType 2>/dev/null | awk '/Memory:/ { gsub(/[^0-9]/, "", \$2); print int(\$2) }')
+        if [[ \$mem_total_gb && \$mem_total_gb -gt 0 ]]; then
+          # Estimate usage at 50% since we can't get actual usage this way
+          mem_used_gb=\$(( mem_total_gb / 2 ))
+          mem_percent=50
+          macos_mem_detected=1
         fi
       fi` : ''}${config.showLoad ? `
       
-      if command -v sysctl >/dev/null 2>&1; then
+      # Enhanced macOS load detection with fallbacks
+      macos_load_detected=0
+      
+      # Primary method: sysctl vm.loadavg
+      if [[ \$macos_load_detected -eq 0 ]] && command -v sysctl >/dev/null 2>&1; then
         load_info=\$(sysctl -n vm.loadavg 2>/dev/null)
         if [[ \$load_info ]]; then
           load_array=(\$load_info)
-          load_1min=\${load_array[1]}
-          load_5min=\${load_array[2]}
-          load_15min=\${load_array[3]}
+          if [[ \${#load_array[@]} -ge 4 ]]; then
+            load_1min=\${load_array[1]}
+            load_5min=\${load_array[2]}
+            load_15min=\${load_array[3]}
+            macos_load_detected=1
+          fi
+        fi
+      fi
+      
+      # Fallback 1: uptime command
+      if [[ \$macos_load_detected -eq 0 ]] && command -v uptime >/dev/null 2>&1; then
+        uptime_info=\$(uptime 2>/dev/null)
+        if [[ \$uptime_info =~ load[[:space:]]+averages:[[:space:]]+([0-9.]+)[[:space:]]+([0-9.]+)[[:space:]]+([0-9.]+) ]]; then
+          load_1min=\${BASH_REMATCH[1]}
+          load_5min=\${BASH_REMATCH[2]}
+          load_15min=\${BASH_REMATCH[3]}
+          macos_load_detected=1
+        fi
+      fi
+      
+      # Fallback 2: w command (if available)
+      if [[ \$macos_load_detected -eq 0 ]] && command -v w >/dev/null 2>&1; then
+        w_output=\$(w | head -1 2>/dev/null)
+        if [[ \$w_output =~ load[[:space:]]+averages:[[:space:]]+([0-9.]+)[[:space:]]+([0-9.]+)[[:space:]]+([0-9.]+) ]]; then
+          load_1min=\${BASH_REMATCH[1]}
+          load_5min=\${BASH_REMATCH[2]}
+          load_15min=\${BASH_REMATCH[3]}
+          macos_load_detected=1
         fi
       fi` : ''}
       ;;

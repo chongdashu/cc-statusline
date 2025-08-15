@@ -100,8 +100,8 @@ export function generateMockCcusageOutput(): any {
   }
 }
 
-export function generateMockSystemData(): any {
-  return {
+export function generateMockSystemData(platform?: 'Linux' | 'WSL' | 'Darwin' | 'Windows'): any {
+  const baseData = {
     cpu_percent: 45.2,
     memory_used_gb: 8,
     memory_total_gb: 16,
@@ -109,8 +109,72 @@ export function generateMockSystemData(): any {
     load_1min: 1.25,
     load_5min: 1.15,
     load_15min: 0.98,
-    platform: "Linux"
+    platform: platform || "Linux"
   }
+
+  // Platform-specific variations
+  switch (platform) {
+    case 'WSL':
+      return {
+        ...baseData,
+        platform: 'WSL',
+        wsl_version: '2',
+        // WSL typically shows different CPU characteristics
+        cpu_percent: 32.5,
+        memory_used_gb: 6,
+        memory_total_gb: 12,
+        memory_percent: 50.0,
+        // WSL load averages tend to be lower due to Windows integration
+        load_1min: 0.85,
+        load_5min: 0.92,
+        load_15min: 1.05,
+        // Additional WSL-specific metrics
+        cpu_cores: 8,
+        memory_available_gb: 6
+      }
+    
+    case 'Darwin':
+      return {
+        ...baseData,
+        platform: 'Darwin',
+        // macOS typically has different memory patterns
+        cpu_percent: 28.7,
+        memory_used_gb: 12,
+        memory_total_gb: 32,
+        memory_percent: 37.5,
+        load_1min: 2.15,
+        load_5min: 2.05,
+        load_15min: 1.95,
+        // macOS-specific
+        page_size: 4096,
+        memory_pressure: 'normal'
+      }
+    
+    case 'Windows':
+      return {
+        ...baseData,
+        platform: 'Windows',
+        cpu_percent: 55.0,
+        memory_used_gb: 10,
+        memory_total_gb: 24,
+        memory_percent: 41.7,
+        // Windows doesn't have traditional load averages
+        load_1min: 0,
+        load_5min: 0,
+        load_15min: 0
+      }
+    
+    default:
+      return baseData
+  }
+}
+
+export function generateMockWSLSystemData(): any {
+  return generateMockSystemData('WSL')
+}
+
+export function generateMockMacOSSystemData(): any {
+  return generateMockSystemData('Darwin')
 }
 
 async function executeScript(scriptPath: string, input: string): Promise<{ success: boolean, output: string, error?: string }> {
@@ -244,6 +308,20 @@ export function analyzeTestResult(result: TestResult, config: StatuslineConfig):
 
   if (config.features.some(f => ['cpu', 'memory', 'load'].includes(f)) && !config.systemMonitoring) {
     suggestions.push('System monitoring features detected but configuration missing')
+  }
+
+  // Platform-specific performance suggestions
+  if (result.output.includes('WSL') || result.output.includes('microsoft')) {
+    if (result.executionTime > 200) {
+      suggestions.push('WSL detected - consider WSL-specific optimizations for better performance')
+    }
+    if (config.features.includes('load') && !result.output.includes('load:')) {
+      issues.push('WSL load monitoring may need special configuration')
+    }
+  }
+
+  if (result.output.includes('Darwin') && result.executionTime > 250) {
+    suggestions.push('macOS detected - ensure sysctl commands are available for optimal performance')
   }
   
   return {

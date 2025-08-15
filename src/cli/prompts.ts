@@ -12,6 +12,7 @@ export interface StatuslineConfig {
     refreshRate: number
     cpuThreshold: number
     memoryThreshold: number
+    loadThreshold: number
   }
 }
 
@@ -50,8 +51,83 @@ export async function collectConfiguration(): Promise<StatuslineConfig> {
     }
   ])
 
-  // Set intelligent defaults
-  const hasSystemMonitoring = config.features.some((f: string) => ['cpu', 'memory', 'load'].includes(f))
+  // Add system monitoring configuration if system features are selected
+  const hasSystemFeatures = config.features.some((f: string) => ['cpu', 'memory', 'load'].includes(f))
+  
+  if (hasSystemFeatures) {
+    const systemConfig = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'refreshRate',
+        message: 'System monitoring refresh rate (seconds):',
+        default: '3',
+        validate: (input: string) => {
+          const num = parseInt(input)
+          if (isNaN(num) || num < 1 || num > 60) {
+            return 'Please enter a number between 1 and 60 seconds'
+          }
+          return true
+        }
+      },
+      {
+        type: 'input',
+        name: 'cpuThreshold',
+        message: 'CPU usage warning threshold (percentage):',
+        default: '75',
+        validate: (input: string) => {
+          const num = parseInt(input)
+          if (isNaN(num) || num < 10 || num > 95) {
+            return 'Please enter a number between 10 and 95 percent'
+          }
+          return true
+        }
+      },
+      {
+        type: 'input',
+        name: 'memoryThreshold',
+        message: 'Memory usage warning threshold (percentage):',
+        default: '80',
+        validate: (input: string) => {
+          const num = parseInt(input)
+          if (isNaN(num) || num < 10 || num > 95) {
+            return 'Please enter a number between 10 and 95 percent'
+          }
+          return true
+        }
+      },
+      {
+        type: 'input',
+        name: 'loadThreshold',
+        message: 'System load warning threshold (load average):',
+        default: '2.0',
+        validate: (input: string) => {
+          const num = parseFloat(input)
+          if (isNaN(num) || num < 0.1 || num > 10.0) {
+            return 'Please enter a number between 0.1 and 10.0'
+          }
+          return true
+        }
+      }
+    ])
+    
+    // Merge system monitoring config
+    config.systemMonitoring = {
+      refreshRate: parseInt(systemConfig.refreshRate),
+      cpuThreshold: parseInt(systemConfig.cpuThreshold),
+      memoryThreshold: parseInt(systemConfig.memoryThreshold),
+      loadThreshold: parseFloat(systemConfig.loadThreshold)
+    }
+  }
+
+  // Set intelligent defaults for system monitoring if not already configured
+  if (!config.systemMonitoring && hasSystemFeatures) {
+    config.systemMonitoring = {
+      refreshRate: 3, // 3 second default refresh rate
+      cpuThreshold: 75,
+      memoryThreshold: 80,
+      loadThreshold: 2.0
+    }
+  }
   
   return {
     features: config.features,
@@ -61,13 +137,7 @@ export async function collectConfiguration(): Promise<StatuslineConfig> {
     ccusageIntegration: true, // Always enabled since npx works
     logging: false,
     customEmojis: false,
-    ...(hasSystemMonitoring && {
-      systemMonitoring: {
-        refreshRate: 3, // 3 second default refresh rate
-        cpuThreshold: 80,
-        memoryThreshold: 85
-      }
-    })
+    ...config
   } as StatuslineConfig
 }
 
@@ -88,6 +158,7 @@ export function displayConfigSummary(config: StatuslineConfig): void {
   
   if (config.systemMonitoring) {
     console.log(`   💻 System monitoring enabled (${config.systemMonitoring.refreshRate}s refresh)`)
+    console.log(`      CPU threshold: ${config.systemMonitoring.cpuThreshold}%, Memory: ${config.systemMonitoring.memoryThreshold}%, Load: ${config.systemMonitoring.loadThreshold}`)
   }
   
   console.log('')
