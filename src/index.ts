@@ -7,7 +7,7 @@ const program = new Command()
 program
   .name('cc-statusline')
   .description('Interactive CLI tool for generating custom Claude Code statuslines')
-  .version('1.0.0')
+  .version('1.2.3')
 
 program
   .command('init')
