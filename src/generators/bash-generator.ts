@@ -73,10 +73,14 @@ if command -v jq >/dev/null 2>&1; then${hasDirectory ? `
   model_name=$(echo "$input" | jq -r '.model.display_name // "Claude"' 2>/dev/null)
   model_version=$(echo "$input" | jq -r '.model.version // ""' 2>/dev/null)` : ''}${hasContext ? `
   session_id=$(echo "$input" | jq -r '.session_id // ""' 2>/dev/null)` : ''}
+  cc_version=$(echo "$input" | jq -r '.version // ""' 2>/dev/null)
+  output_style=$(echo "$input" | jq -r '.output_style.name // ""' 2>/dev/null)
 else${hasDirectory ? `
   current_dir="unknown"` : ''}${hasModel ? `
   model_name="Claude"; model_version=""` : ''}${hasContext ? `
   session_id=""` : ''}
+  cc_version=""
+  output_style=""
 fi
 `
 }
@@ -152,45 +156,80 @@ function generateLoggingOutput(): string {
 function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageConfig: any): string {
   const emojis = config.colors && !config.customEmojis
 
-  let displayCode = `
-# ---- render statusline ----`
-
-  // Directory
-  if (config.features.includes('directory')) {
-    const dirEmoji = emojis ? '📁' : 'dir:'
-    displayCode += `
-printf '${dirEmoji} %s%s%s' "$(dir_color)" "$current_dir" "$(rst)"`
-  }
-
-  // Git
-  displayCode += generateGitDisplayCode(gitConfig, config.colors, emojis)
-
-  // Model
-  if (config.features.includes('model')) {
-    const modelEmoji = emojis ? '🤖' : 'model:'
-    displayCode += `
-printf '  ${modelEmoji} %s%s%s' "$(model_color)" "$model_name" "$(rst)"
+  return `
+# ---- render statusline ----
+# Line 1: Core info (directory, git, model, claude code version, output style)
+${config.features.includes('directory') ? `printf '📁 %s%s%s' "$(dir_color)" "$current_dir" "$(rst)"` : ''}${gitConfig.enabled ? `
+if [ -n "$git_branch" ]; then
+  printf '  🌿 %s%s%s' "$(git_color)" "$git_branch" "$(rst)"
+fi` : ''}${config.features.includes('model') ? `
+printf '  🤖 %s%s%s' "$(model_color)" "$model_name" "$(rst)"
 if [ -n "$model_version" ] && [ "$model_version" != "null" ]; then
   printf '  🏷️ %s%s%s' "$(version_color)" "$model_version" "$(rst)"
-fi`
-  }
+fi` : ''}
+if [ -n "$cc_version" ] && [ "$cc_version" != "null" ]; then
+  printf '  📟 %sv%s%s' "$(cc_version_color)" "$cc_version" "$(rst)"
+fi
+if [ -n "$output_style" ] && [ "$output_style" != "null" ]; then
+  printf '  🎨 %s%s%s' "$(style_color)" "$output_style" "$(rst)"
+fi
 
-  // Context
-  if (config.features.includes('context')) {
-    const contextEmoji = emojis ? '🧠' : 'ctx:'
-    displayCode += `
-# context display
+# Line 2: Context and session time
+line2=""${config.features.includes('context') ? `
 if [ -n "$context_pct" ]; then
-  # Create progress bar showing remaining context (filled = remaining)
   context_bar=$(progress_bar "$context_remaining_pct" 10)
-  printf '  ${contextEmoji} Context Remaining: %s%s [%s]%s' "$(context_color)" "$context_pct" "$context_bar" "$(rst)"
-else
-  printf '  ${contextEmoji} Context Remaining: %sTBD%s' "$(context_color)" "$(rst)"
-fi`
-  }
+  line2="🧠 $(context_color)Context Remaining: \${context_pct} [\${context_bar}]$(rst)"
+fi` : ''}${usageConfig.showSession ? `
+if [ -n "$session_txt" ]; then
+  if [ -n "$line2" ]; then
+    line2="$line2  ⌛ $(session_color)\${session_txt}$(rst) $(session_color)[\${session_bar}]$(rst)"
+  else
+    line2="⌛ $(session_color)\${session_txt}$(rst) $(session_color)[\${session_bar}]$(rst)"
+  fi
+fi` : ''}${config.features.includes('context') ? `
+if [ -z "$line2" ] && [ -z "$context_pct" ]; then
+  line2="🧠 $(context_color)Context Remaining: TBD$(rst)"
+fi` : ''}
 
-  // Usage features
-  displayCode += generateUsageDisplayCode(usageConfig, config.colors, emojis)
+# Line 3: Cost and usage analytics
+line3=""${usageConfig.showCost ? `
+if [ -n "$cost_usd" ] && [[ "$cost_usd" =~ ^[0-9.]+$ ]]; then${usageConfig.showBurnRate ? `
+  if [ -n "$cost_per_hour" ] && [[ "$cost_per_hour" =~ ^[0-9.]+$ ]]; then
+    cost_per_hour_formatted=$(printf '%.2f' "$cost_per_hour")
+    line3="💰 $(cost_color)\\$$(printf '%.2f' \\"$cost_usd\\") (\\$\${cost_per_hour_formatted}/h)$(rst)"
+  else
+    line3="💰 $(cost_color)\\$$(printf '%.2f' \\"$cost_usd\\")$(rst)"
+  fi` : `
+  line3="💰 $(cost_color)\\$$(printf '%.2f' \\"$cost_usd\\")$(rst)"`}
+fi` : ''}${usageConfig.showTokens ? `
+if [ -n "$tot_tokens" ] && [[ "$tot_tokens" =~ ^[0-9]+$ ]]; then${usageConfig.showBurnRate ? `
+  if [ -n "$tpm" ] && [[ "$tpm" =~ ^[0-9.]+$ ]]; then
+    tpm_formatted=$(printf '%.0f' "$tpm")
+    if [ -n "$line3" ]; then
+      line3="$line3  📊 $(usage_color)\${tot_tokens} tok (\${tpm_formatted} tpm)$(rst)"
+    else
+      line3="📊 $(usage_color)\${tot_tokens} tok (\${tpm_formatted} tpm)$(rst)"
+    fi
+  else
+    if [ -n "$line3" ]; then
+      line3="$line3  📊 $(usage_color)\${tot_tokens} tok$(rst)"
+    else
+      line3="📊 $(usage_color)\${tot_tokens} tok$(rst)"
+    fi
+  fi` : `
+  if [ -n "$line3" ]; then
+    line3="$line3  📊 $(usage_color)\${tot_tokens} tok$(rst)"
+  else
+    line3="📊 $(usage_color)\${tot_tokens} tok$(rst)"
+  fi`}
+fi` : ''}
 
-  return displayCode
+# Print lines
+if [ -n "$line2" ]; then
+  printf '\\n%s' "$line2"
+fi
+if [ -n "$line3" ]; then
+  printf '\\n%s' "$line3"
+fi
+printf '\\n'`
 }
