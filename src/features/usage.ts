@@ -14,6 +14,7 @@ export function generateUsageBashCode(config: UsageFeature, colors: boolean): st
 # ---- usage colors ----
 usage_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;189m'; fi; }  # lavender
 cost_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;222m'; fi; }   # light gold
+burn_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;220m'; fi; }   # bright gold
 session_color() { 
   rem_pct=$(( 100 - session_pct ))
   if   (( rem_pct <= 10 )); then SCLR='38;5;210'  # light pink
@@ -24,6 +25,7 @@ session_color() {
 ` : `
 usage_color() { :; }
 cost_color() { :; }
+burn_color() { :; }
 session_color() { :; }
 `
 

@@ -98,5 +98,4 @@ temp/
 tmp/
 
 # Local statusline testing
-.claude/
 statusline-test-*.sh

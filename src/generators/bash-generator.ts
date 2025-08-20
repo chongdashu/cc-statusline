@@ -196,7 +196,7 @@ line3=""${usageConfig.showCost ? `
 if [ -n "$cost_usd" ] && [[ "$cost_usd" =~ ^[0-9.]+$ ]]; then${usageConfig.showBurnRate ? `
   if [ -n "$cost_per_hour" ] && [[ "$cost_per_hour" =~ ^[0-9.]+$ ]]; then
     cost_per_hour_formatted=$(printf '%.2f' "$cost_per_hour")
-    line3="💰 $(cost_color)\\$$(printf '%.2f' \\"$cost_usd\\") (\\$\${cost_per_hour_formatted}/h)$(rst)"
+    line3="💰 $(cost_color)\\$$(printf '%.2f' \\"$cost_usd\\")$(rst) ($(burn_color)\\$\${cost_per_hour_formatted}/h$(rst))"
   else
     line3="💰 $(cost_color)\\$$(printf '%.2f' \\"$cost_usd\\")$(rst)"
   fi` : `
