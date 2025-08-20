@@ -2,9 +2,9 @@
 
 <div align="center">
 
-🚀 **Transform your Claude Code experience with a beautiful, informative statusline**
+**A beautiful, informative statusline for Claude Code**
 
-<img src="docs/images/cc-statusline-running.gif" alt="cc-statusline in action" width="600">
+<img src="docs/images/cc-statusline.png" alt="cc-statusline in action" width="600">
 
 *Real-time directory, git branch, model info, costs, and session time tracking*
 
@@ -16,35 +16,35 @@
 
 ## ⚡ Quick Start
 
-**One command. Two questions. Beautiful statusline. ✨**
+**One command. Two questions. Custom statusline.**
 
 ```bash
-npx @chongdashu/cc-statusline init
+npx @chongdashu/cc-statusline@latest init
 ```
 
 That's it! Answer 2 simple questions, restart Claude Code, and enjoy your new statusline.
 
-## 🎯 Setup with just 1 command
+## 🎯 Simple Setup
 
 <img src="docs/images/cc-statusline-init.gif" alt="Demo of cc-statusline setup" width="500">
 
 ## ✨ What You Get
 
-Transform your bland Claude Code terminal into an information-rich powerhouse:
+Enhance your Claude Code terminal with useful information:
 
-- **📁 Smart Directory Display** - Current folder with `~` abbreviation
-- **🌿 Git Integration** - Current branch name with clean styling  
-- **🤖 Model Intelligence** - Shows which Claude model you're using plus Claude Code version
-- **🧠 Context Awareness** - Real-time context window usage with visual progress bars
-- **💰 Smart Cost Tracking** - Live cost monitoring with highlighted burn rates via ccusage
-- **⌛ Session Management** - Time remaining until usage limit resets with progress visualization
-- **📊 Advanced Analytics** - Token consumption, burn rate metrics, and output style display
-- **🎨 Modern Colors** - Beautiful 256-color palette optimized for Claude Code terminals
-- **⚡ Lightning Fast** - Optimized bash script with <100ms execution time
+- **📁 Directory Display** - Current folder with `~` abbreviation
+- **🌿 Git Integration** - Current branch name  
+- **🤖 Model Info** - Shows which Claude model you're using plus Claude Code version
+- **🧠 Context Usage** - Real-time context window usage with progress bars
+- **💰 Cost Tracking** - Live cost monitoring with burn rates via ccusage
+- **⌛ Session Timer** - Time remaining until usage limit resets
+- **📊 Token Analytics** - Token consumption and burn rate metrics
+- **🎨 Color Support** - 256-color palette for Claude Code terminals
+- **⚡ Fast Execution** - Optimized bash script with <100ms execution time
 
 ## 🎛️ Features Overview
 
-### 🔥 Default Features (All Pre-selected in v1.2.0+)
+### 🔥 Default Features (All Pre-selected in v1.2.2+)
 | Feature | Description | Example |
 |---------|-------------|---------|
 | 📁 **Directory** | Current working directory | `~/my-project` |
@@ -63,7 +63,7 @@ Transform your bland Claude Code terminal into an information-rich powerhouse:
 
 ### 🎨 Example Outputs
 
-**New 3-Line Modern Layout (v1.2.0+):**
+**New 3-Line Modern Layout (v1.2.2+):**
 ```
 📁 ~/Projects/cc-statusline  🌿 feature/context-usage-output-styles  🤖 Sonnet 4  📟 v1.0.85  🎨 default
 🧠 Context Remaining: 83% [========--]  ⌛ 3h 7m until reset at 01:00 (37%) [===-------]
@@ -106,12 +106,12 @@ npm install -g @chongdashu/cc-statusline
 
 ## 🔧 How It Works
 
-### The Magic Behind The Scenes
+### How It Works
 
-1. **🎯 Smart Configuration** - Two intuitive questions configure everything
-2. **🏗️ Intelligent Generation** - Creates optimized bash script tailored to your needs  
-3. **⚙️ Auto-Installation** - Seamlessly integrates with Claude Code settings
-4. **🔄 Real-Time Updates** - Connects to ccusage for live usage statistics
+1. **🎯 Configuration** - Two questions configure your preferences
+2. **🏗️ Generation** - Creates optimized bash script tailored to your needs  
+3. **⚙️ Installation** - Integrates with Claude Code settings
+4. **🔄 Updates** - Connects to ccusage for live usage statistics
 
 ### Technical Architecture
 
@@ -192,7 +192,7 @@ If auto-configuration fails, simply add this to `.claude/settings.json`:
 
 ## 🤝 Contributing
 
-We love contributions! 🎉
+Contributions are welcome!
 
 **Quick Start:**
 ```bash
