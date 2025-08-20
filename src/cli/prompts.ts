@@ -22,6 +22,7 @@ export async function collectConfiguration(): Promise<StatuslineConfig> {
         { name: '📁 Working Directory', value: 'directory', checked: true },
         { name: '🌿 Git Branch', value: 'git', checked: true },
         { name: '🤖 Model Name & Version', value: 'model', checked: true },
+        { name: '🧠 Context Remaining', value: 'context', checked: true },
         { name: '💵 Usage & Cost', value: 'usage', checked: true },
         { name: '⌛ Session Time Remaining', value: 'session', checked: true },
         { name: '📊 Token Statistics', value: 'tokens', checked: false },
@@ -39,6 +40,12 @@ export async function collectConfiguration(): Promise<StatuslineConfig> {
       name: 'colors',
       message: 'Enable colors and emojis?',
       default: true
+    },
+    {
+      type: 'confirm',
+      name: 'logging',
+      message: 'Enable debug logging to .claude/statusline.log?',
+      default: false
     }
   ])
 
@@ -49,7 +56,7 @@ export async function collectConfiguration(): Promise<StatuslineConfig> {
     colors: config.colors,
     theme: 'detailed',
     ccusageIntegration: true, // Always enabled since npx works
-    logging: false,
+    logging: config.logging,
     customEmojis: false
   } as StatuslineConfig
 }

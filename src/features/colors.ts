@@ -14,9 +14,8 @@ RST() { :; }
   }
 
   return `
-# ---- color helpers (TTY-aware, respect NO_COLOR) ----
+# ---- color helpers (force colors for Claude Code) ----
 use_color=1
-[ -t 1 ] || use_color=0
 [ -n "$NO_COLOR" ] && use_color=0
 
 C() { if [ "$use_color" -eq 1 ]; then printf '\\033[%sm' "$1"; fi; }
@@ -26,10 +25,10 @@ RST() { if [ "$use_color" -eq 1 ]; then printf '\\033[0m'; fi; }
 
 export function generateBasicColors(): string {
   return `
-# ---- basic colors ----
-dir_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[1;36m'; fi; }    # cyan
-model_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[1;35m'; fi; }  # magenta  
-version_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[1;33m'; fi; } # yellow
+# ---- modern sleek colors ----
+dir_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;117m'; fi; }    # sky blue
+model_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;147m'; fi; }  # light purple  
+version_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;180m'; fi; } # soft yellow
 rst() { if [ "$use_color" -eq 1 ]; then printf '\\033[0m'; fi; }
 `
 }
