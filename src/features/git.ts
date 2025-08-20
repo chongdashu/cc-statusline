@@ -10,7 +10,7 @@ export function generateGitBashCode(config: GitFeature, colors: boolean): string
 
   const colorCode = colors ? `
 # ---- git colors ----
-git_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[1;32m'; fi; }
+git_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;150m'; fi; }  # soft green
 rst() { if [ "$use_color" -eq 1 ]; then printf '\\033[0m'; fi; }
 ` : `
 git_color() { :; }

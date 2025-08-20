@@ -12,18 +12,20 @@ export function generateUsageBashCode(config: UsageFeature, colors: boolean): st
 
   const colorCode = colors ? `
 # ---- usage colors ----
-usage_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[1;35m'; fi; }
-cost_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[1;36m'; fi; }
+usage_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;189m'; fi; }  # lavender
+cost_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;222m'; fi; }   # light gold
+burn_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;220m'; fi; }   # bright gold
 session_color() { 
   rem_pct=$(( 100 - session_pct ))
-  if   (( rem_pct <= 10 )); then SCLR='1;31'
-  elif (( rem_pct <= 25 )); then SCLR='1;33'
-  else                          SCLR='1;32'; fi
+  if   (( rem_pct <= 10 )); then SCLR='38;5;210'  # light pink
+  elif (( rem_pct <= 25 )); then SCLR='38;5;228'  # light yellow  
+  else                          SCLR='38;5;194'; fi  # light green
   if [ "$use_color" -eq 1 ]; then printf '\\033[%sm' "$SCLR"; fi
 }
 ` : `
 usage_color() { :; }
 cost_color() { :; }
+burn_color() { :; }
 session_color() { :; }
 `
 

@@ -8,6 +8,7 @@ export function generateBashStatusline(config: StatuslineConfig): string {
   const hasUsage = config.features.some(f => ['usage', 'session', 'tokens', 'burnrate'].includes(f))
   const hasDirectory = config.features.includes('directory')
   const hasModel = config.features.includes('model')
+  const hasContext = config.features.includes('context')
 
   // Build usage feature config
   const usageConfig = {
@@ -39,8 +40,9 @@ ${generateColorBashCode({ enabled: config.colors, theme: config.theme })}
 ${config.colors ? generateBasicColors() : ''}
 ${hasUsage ? generateUsageUtilities() : ''}
 ${hasGit ? generateGitUtilities() : ''}
-${generateBasicDataExtraction(hasDirectory, hasModel)}
+${generateBasicDataExtraction(hasDirectory, hasModel, hasContext)}
 ${hasGit ? generateGitBashCode(gitConfig, config.colors) : ''}
+${hasContext ? generateContextBashCode(config.colors) : ''}
 ${hasUsage ? generateUsageBashCode(usageConfig, config.colors) : ''}
 ${config.logging ? generateLoggingOutput() : ''}
 ${generateDisplaySection(config, gitConfig, usageConfig)}
@@ -63,16 +65,81 @@ TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 `
 }
 
-function generateBasicDataExtraction(hasDirectory: boolean, hasModel: boolean): string {
+function generateBasicDataExtraction(hasDirectory: boolean, hasModel: boolean, hasContext: boolean): string {
   return `
 # ---- basics ----
 if command -v jq >/dev/null 2>&1; then${hasDirectory ? `
   current_dir=$(echo "$input" | jq -r '.workspace.current_dir // .cwd // "unknown"' 2>/dev/null | sed "s|^$HOME|~|g")` : ''}${hasModel ? `
   model_name=$(echo "$input" | jq -r '.model.display_name // "Claude"' 2>/dev/null)
-  model_version=$(echo "$input" | jq -r '.model.version // ""' 2>/dev/null)` : ''}
+  model_version=$(echo "$input" | jq -r '.model.version // ""' 2>/dev/null)` : ''}${hasContext ? `
+  session_id=$(echo "$input" | jq -r '.session_id // ""' 2>/dev/null)` : ''}
+  cc_version=$(echo "$input" | jq -r '.version // ""' 2>/dev/null)
+  output_style=$(echo "$input" | jq -r '.output_style.name // ""' 2>/dev/null)
 else${hasDirectory ? `
   current_dir="unknown"` : ''}${hasModel ? `
-  model_name="Claude"; model_version=""` : ''}
+  model_name="Claude"; model_version=""` : ''}${hasContext ? `
+  session_id=""` : ''}
+  cc_version=""
+  output_style=""
+fi
+`
+}
+
+function generateContextBashCode(colors: boolean): string {
+  return `
+# ---- context window calculation ----
+context_pct=""
+context_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[1;37m'; fi; }  # default white
+
+# Determine max context based on model
+get_max_context() {
+  local model_name="$1"
+  case "$model_name" in
+    *"Opus 4"*|*"opus 4"*|*"Opus"*|*"opus"*)
+      echo "200000"  # 200K for all Opus versions
+      ;;
+    *"Sonnet 4"*|*"sonnet 4"*|*"Sonnet 3.5"*|*"sonnet 3.5"*|*"Sonnet"*|*"sonnet"*)
+      echo "200000"  # 200K for Sonnet 3.5+ and 4.x
+      ;;
+    *"Haiku 3.5"*|*"haiku 3.5"*|*"Haiku 4"*|*"haiku 4"*|*"Haiku"*|*"haiku"*)
+      echo "200000"  # 200K for modern Haiku
+      ;;
+    *"Claude 3 Haiku"*|*"claude 3 haiku"*)
+      echo "100000"  # 100K for original Claude 3 Haiku
+      ;;
+    *)
+      echo "200000"  # Default to 200K
+      ;;
+  esac
+}
+
+if [ -n "$session_id" ] && command -v jq >/dev/null 2>&1; then
+  MAX_CONTEXT=$(get_max_context "$model_name")
+  
+  # Convert current dir to session file path
+  project_dir=$(echo "$current_dir" | sed "s|~|$HOME|g" | sed 's|/|-|g' | sed 's|^-||')
+  session_file="$HOME/.claude/projects/-\${project_dir}/\${session_id}.jsonl"
+  
+  if [ -f "$session_file" ]; then
+    # Get the latest input token count from the session file
+    latest_tokens=$(tail -20 "$session_file" | jq -r 'select(.message.usage) | .message.usage | ((.input_tokens // 0) + (.cache_read_input_tokens // 0))' 2>/dev/null | tail -1)
+    
+    if [ -n "$latest_tokens" ] && [ "$latest_tokens" -gt 0 ]; then
+      context_used_pct=$(( latest_tokens * 100 / MAX_CONTEXT ))
+      context_remaining_pct=$(( 100 - context_used_pct ))
+      
+      # Set color based on remaining percentage
+      if [ "$context_remaining_pct" -le 20 ]; then
+        context_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;203m'; fi; }  # coral red
+      elif [ "$context_remaining_pct" -le 40 ]; then
+        context_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;215m'; fi; }  # peach
+      else
+        context_color() { if [ "$use_color" -eq 1 ]; then printf '\\033[38;5;158m'; fi; }  # mint green
+      fi
+      
+      context_pct="\${context_remaining_pct}%"
+    fi
+  fi
 fi
 `
 }
@@ -81,7 +148,7 @@ function generateLoggingOutput(): string {
   return `
 # ---- log extracted data ----
 {
-  echo "[\$TIMESTAMP] Extracted: dir=\${current_dir:-}, model=\${model_name:-}, version=\${model_version:-}, git=\${git_branch:-}, cost=\${cost_usd:-}, cost_ph=\${cost_per_hour:-}, tokens=\${tot_tokens:-}, tpm=\${tpm:-}, session_pct=\${session_pct:-}"
+  echo "[\$TIMESTAMP] Extracted: dir=\${current_dir:-}, model=\${model_name:-}, version=\${model_version:-}, git=\${git_branch:-}, context=\${context_pct:-}, cost=\${cost_usd:-}, cost_ph=\${cost_per_hour:-}, tokens=\${tot_tokens:-}, tpm=\${tpm:-}, session_pct=\${session_pct:-}"
 } >> "$LOG_FILE" 2>/dev/null
 `
 }
@@ -89,31 +156,80 @@ function generateLoggingOutput(): string {
 function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageConfig: any): string {
   const emojis = config.colors && !config.customEmojis
 
-  let displayCode = `
-# ---- render statusline ----`
-
-  // Directory
-  if (config.features.includes('directory')) {
-    const dirEmoji = emojis ? '📁' : 'dir:'
-    displayCode += `
-printf '${dirEmoji} %s%s%s' "$(dir_color)" "$current_dir" "$(rst)"`
-  }
-
-  // Git
-  displayCode += generateGitDisplayCode(gitConfig, config.colors, emojis)
-
-  // Model
-  if (config.features.includes('model')) {
-    const modelEmoji = emojis ? '🤖' : 'model:'
-    displayCode += `
-printf '  ${modelEmoji} %s%s%s' "$(model_color)" "$model_name" "$(rst)"
+  return `
+# ---- render statusline ----
+# Line 1: Core info (directory, git, model, claude code version, output style)
+${config.features.includes('directory') ? `printf '📁 %s%s%s' "$(dir_color)" "$current_dir" "$(rst)"` : ''}${gitConfig.enabled ? `
+if [ -n "$git_branch" ]; then
+  printf '  🌿 %s%s%s' "$(git_color)" "$git_branch" "$(rst)"
+fi` : ''}${config.features.includes('model') ? `
+printf '  🤖 %s%s%s' "$(model_color)" "$model_name" "$(rst)"
 if [ -n "$model_version" ] && [ "$model_version" != "null" ]; then
   printf '  🏷️ %s%s%s' "$(version_color)" "$model_version" "$(rst)"
-fi`
-  }
+fi` : ''}
+if [ -n "$cc_version" ] && [ "$cc_version" != "null" ]; then
+  printf '  📟 %sv%s%s' "$(cc_version_color)" "$cc_version" "$(rst)"
+fi
+if [ -n "$output_style" ] && [ "$output_style" != "null" ]; then
+  printf '  🎨 %s%s%s' "$(style_color)" "$output_style" "$(rst)"
+fi
 
-  // Usage features
-  displayCode += generateUsageDisplayCode(usageConfig, config.colors, emojis)
+# Line 2: Context and session time
+line2=""${config.features.includes('context') ? `
+if [ -n "$context_pct" ]; then
+  context_bar=$(progress_bar "$context_remaining_pct" 10)
+  line2="🧠 $(context_color)Context Remaining: \${context_pct} [\${context_bar}]$(rst)"
+fi` : ''}${usageConfig.showSession ? `
+if [ -n "$session_txt" ]; then
+  if [ -n "$line2" ]; then
+    line2="$line2  ⌛ $(session_color)\${session_txt}$(rst) $(session_color)[\${session_bar}]$(rst)"
+  else
+    line2="⌛ $(session_color)\${session_txt}$(rst) $(session_color)[\${session_bar}]$(rst)"
+  fi
+fi` : ''}${config.features.includes('context') ? `
+if [ -z "$line2" ] && [ -z "$context_pct" ]; then
+  line2="🧠 $(context_color)Context Remaining: TBD$(rst)"
+fi` : ''}
 
-  return displayCode
+# Line 3: Cost and usage analytics
+line3=""${usageConfig.showCost ? `
+if [ -n "$cost_usd" ] && [[ "$cost_usd" =~ ^[0-9.]+$ ]]; then${usageConfig.showBurnRate ? `
+  if [ -n "$cost_per_hour" ] && [[ "$cost_per_hour" =~ ^[0-9.]+$ ]]; then
+    cost_per_hour_formatted=$(printf '%.2f' "$cost_per_hour")
+    line3="💰 $(cost_color)\\$$(printf '%.2f' \\"$cost_usd\\")$(rst) ($(burn_color)\\$\${cost_per_hour_formatted}/h$(rst))"
+  else
+    line3="💰 $(cost_color)\\$$(printf '%.2f' \\"$cost_usd\\")$(rst)"
+  fi` : `
+  line3="💰 $(cost_color)\\$$(printf '%.2f' \\"$cost_usd\\")$(rst)"`}
+fi` : ''}${usageConfig.showTokens ? `
+if [ -n "$tot_tokens" ] && [[ "$tot_tokens" =~ ^[0-9]+$ ]]; then${usageConfig.showBurnRate ? `
+  if [ -n "$tpm" ] && [[ "$tpm" =~ ^[0-9.]+$ ]]; then
+    tpm_formatted=$(printf '%.0f' "$tpm")
+    if [ -n "$line3" ]; then
+      line3="$line3  📊 $(usage_color)\${tot_tokens} tok (\${tpm_formatted} tpm)$(rst)"
+    else
+      line3="📊 $(usage_color)\${tot_tokens} tok (\${tpm_formatted} tpm)$(rst)"
+    fi
+  else
+    if [ -n "$line3" ]; then
+      line3="$line3  📊 $(usage_color)\${tot_tokens} tok$(rst)"
+    else
+      line3="📊 $(usage_color)\${tot_tokens} tok$(rst)"
+    fi
+  fi` : `
+  if [ -n "$line3" ]; then
+    line3="$line3  📊 $(usage_color)\${tot_tokens} tok$(rst)"
+  else
+    line3="📊 $(usage_color)\${tot_tokens} tok$(rst)"
+  fi`}
+fi` : ''}
+
+# Print lines
+if [ -n "$line2" ]; then
+  printf '\\n%s' "$line2"
+fi
+if [ -n "$line3" ]; then
+  printf '\\n%s' "$line3"
+fi
+printf '\\n'`
 }

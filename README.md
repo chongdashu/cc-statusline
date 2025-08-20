@@ -34,40 +34,47 @@ Transform your bland Claude Code terminal into an information-rich powerhouse:
 
 - **📁 Smart Directory Display** - Current folder with `~` abbreviation
 - **🌿 Git Integration** - Current branch name with clean styling  
-- **🤖 Model Intelligence** - Shows which Claude model you're using
-- **💵 Real-Time Cost Tracking** - Live cost monitoring via ccusage integration
-- **⌛ Session Management** - Time remaining until usage limit resets with progress bars
-- **📊 Advanced Analytics** - Optional token consumption and burn rate metrics
-- **🎨 Beautiful Colors** - TTY-aware colors that respect your terminal theme
+- **🤖 Model Intelligence** - Shows which Claude model you're using plus Claude Code version
+- **🧠 Context Awareness** - Real-time context window usage with visual progress bars
+- **💰 Smart Cost Tracking** - Live cost monitoring with highlighted burn rates via ccusage
+- **⌛ Session Management** - Time remaining until usage limit resets with progress visualization
+- **📊 Advanced Analytics** - Token consumption, burn rate metrics, and output style display
+- **🎨 Modern Colors** - Beautiful 256-color palette optimized for Claude Code terminals
 - **⚡ Lightning Fast** - Optimized bash script with <100ms execution time
 
 ## 🎛️ Features Overview
 
-### 🔥 Default Features (Pre-selected)
+### 🔥 Default Features (All Pre-selected in v1.2.0+)
 | Feature | Description | Example |
 |---------|-------------|---------|
 | 📁 **Directory** | Current working directory | `~/my-project` |
-| 🌿 **Git Branch** | Active git branch | `main` |
-| 🤖 **Model** | Claude model name & version | `Opus 4.1` |
-| 💵 **Usage & Cost** | Real-time costs with hourly rate | `$2.48 ($12.50/h)` |
-| ⌛ **Session Time** | Time until reset with progress | `2h 15m until reset (68%)` |
+| 🌿 **Git Branch** | Active git branch | `feature/statusline` |
+| 🤖 **Model** | Claude model name & version | `Sonnet 4` |
+| 📟 **Claude Code** | Claude Code version | `v1.0.85` |
+| 🎨 **Output Style** | Current output style setting | `default` |
+| 🧠 **Context** | Remaining context with progress bar | `83% [========--]` |
+| 💰 **Cost** | Live costs with highlighted burn rate | `$49.00 ($16.55/h)` |
+| ⌛ **Session** | Time until reset with progress | `3h 7m until reset at 01:00 (37%) [===-------]` |
 
-### 🚀 Optional Power Features
+### 🚀 Power Features (Also Pre-selected)
 | Feature | Description | Example |
 |---------|-------------|---------|
-| 📊 **Token Stats** | Total tokens consumed | `45,230 tok` |
-| ⚡ **Burn Rate** | Tokens per minute | `847 tpm` |
+| 📊 **Tokens** | Token consumption with burn rate | `14638846 tok (279900 tpm)` |
 
 ### 🎨 Example Outputs
 
-**Minimal Setup:**
+**New 3-Line Modern Layout (v1.2.0+):**
 ```
-📁 ~/my-app  🌿 main  🤖 Claude Sonnet
+📁 ~/Projects/cc-statusline  🌿 feature/context-usage-output-styles  🤖 Sonnet 4  📟 v1.0.85  🎨 default
+🧠 Context Remaining: 83% [========--]  ⌛ 3h 7m until reset at 01:00 (37%) [===-------]
+💰 $49.00 ($16.55/h)  📊 14638846 tok (279900 tpm)
 ```
 
-**Full Power Mode:**
+**Compact Mode:**
 ```
-📁 ~/projects/ai-tools  🌿 feature/statusline  🤖 Opus 4.1  ⌛ 2h 15m until reset (68%) [======----]  💵 $16.40 ($7.41/h)  📊 64,080 tok (850 tpm)
+📁 ~/my-app  🌿 main  🤖 Claude Sonnet  📟 v1.0.85
+🧠 Context Remaining: 95% [=========-]
+💰 $2.48 ($12.50/h)
 ```
 
 ## 🛠️ Advanced Usage
@@ -109,8 +116,8 @@ npm install -g @chongdashu/cc-statusline
 ### Technical Architecture
 
 - **⚡ Bash-First** - Native shell execution for maximum speed
-- **🎨 TTY-Aware** - Automatically detects terminal capabilities
-- **🌍 Environment Respect** - Honors `NO_COLOR` and other conventions
+- **🎨 Claude Code Optimized** - Forces colors for Claude Code terminals (respects NO_COLOR)
+- **🌍 Environment Respect** - Honors `NO_COLOR` and other terminal conventions
 - **📦 Zero Dependencies** - Self-contained script with graceful fallbacks
 - **🔒 Secure** - No network requests except ccusage integration
 
@@ -169,6 +176,8 @@ If auto-configuration fails, simply add this to `.claude/settings.json`:
 - **Install jq**: `brew install jq` (macOS) or `apt install jq` (Ubuntu)
 - **ccusage setup**: Works automatically via `npx ccusage@latest`
 - **Git not found**: Install git for branch display
+- **Context not showing**: Ensure you're in an active Claude Code session with context usage
+- **Colors not working**: Check that NO_COLOR environment variable is not set
 
 ## 🚀 Performance
 

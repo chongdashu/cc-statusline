@@ -12,33 +12,42 @@ export interface StatuslineConfig {
 
 export async function collectConfiguration(): Promise<StatuslineConfig> {
   console.log('🚀 Welcome to cc-statusline! Let\'s create your custom Claude Code statusline.\n')
-
+  console.log('✨ All features are enabled by default. Use ↑/↓ arrows to navigate, SPACE to toggle, ENTER to continue.\n')
+  
   const config = await inquirer.prompt([
     {
       type: 'checkbox',
       name: 'features',
-      message: 'What would you like to display in your statusline?',
+      message: 'Select statusline features (scroll down for more options):',
       choices: [
         { name: '📁 Working Directory', value: 'directory', checked: true },
         { name: '🌿 Git Branch', value: 'git', checked: true },
         { name: '🤖 Model Name & Version', value: 'model', checked: true },
+        { name: '🧠 Context Remaining', value: 'context', checked: true },
         { name: '💵 Usage & Cost', value: 'usage', checked: true },
         { name: '⌛ Session Time Remaining', value: 'session', checked: true },
-        { name: '📊 Token Statistics', value: 'tokens', checked: false },
-        { name: '⚡ Burn Rate (tokens/min)', value: 'burnrate', checked: false }
+        { name: '📊 Token Statistics', value: 'tokens', checked: true },
+        { name: '⚡ Burn Rate (tokens/min)', value: 'burnrate', checked: true }
       ],
       validate: (answer: string[]) => {
         if (answer.length < 1) {
           return 'You must choose at least one feature.'
         }
         return true
-      }
+      },
+      pageSize: 10
     },
     {
       type: 'confirm',
       name: 'colors',
-      message: 'Enable colors and emojis?',
+      message: '\n🎨 Enable modern color scheme and emojis?',
       default: true
+    },
+    {
+      type: 'confirm',
+      name: 'logging',
+      message: '\n📝 Enable debug logging to .claude/statusline.log?',
+      default: false
     }
   ])
 
@@ -49,7 +58,7 @@ export async function collectConfiguration(): Promise<StatuslineConfig> {
     colors: config.colors,
     theme: 'detailed',
     ccusageIntegration: true, // Always enabled since npx works
-    logging: false,
+    logging: config.logging,
     customEmojis: false
   } as StatuslineConfig
 }
