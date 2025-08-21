@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2025-08-20
+
+### Fixed
+- 🔒 **Critical Process Spawning Fix** - Added file-based locking mechanism to prevent infinite ccusage process spawning
+- ⚡ **Performance** - Implemented 3-second timeout for ccusage calls to prevent hanging
+- 🛡️ **Stability** - Added PID tracking for stale lock detection and cleanup
+- 🔧 **Cross-platform** - Multiple timeout strategies for Linux, macOS, and BSD compatibility
+
+### Contributors
+- 🙏 **Special thanks to [Jonathan Borgwing (@DevVig)](https://github.com/DevVig)** for identifying and implementing the critical process spawning fix ([#4](https://github.com/chongdashu/cc-statusline/pull/4))
+
+### Technical Details
+- **File-based locking**: Uses `/tmp/ccusage_statusline.lock` directory as a mutex to ensure single execution
+- **PID tracking**: Stores process ID in `/tmp/ccusage_statusline.pid` for stale lock detection  
+- **Graceful degradation**: Skips execution when locked instead of queuing (prevents pile-up)
+- **Automatic cleanup**: Detects and removes stale locks from crashed processes using `kill -0`
+- **Cross-platform timeouts**: Multiple timeout strategies (timeout/gtimeout/fallback) for all systems
+- **Testing included**: Comprehensive test suite in `test/` directory to verify locking behavior
+
 ## [1.0.1] - 2025-08-13
 
 ### Added
