@@ -209,6 +209,45 @@ npm install && npm run build
 
 See our [Contributing Guide](CONTRIBUTING.md) for detailed information.
 
+## 🧪 Testing
+
+### Locking Mechanism Tests
+
+The ccusage integration includes a robust file-based locking mechanism to prevent concurrent process spawning. Test this functionality:
+
+**Single Test:**
+```bash
+echo '{}' | ./test/test-statusline-with-lock.sh
+```
+
+**Concurrent Test:**
+```bash
+./test/test-concurrent-locking.sh
+```
+
+**Manual Concurrent Test:**
+```bash
+# Spawn 10 concurrent processes
+for i in {1..10}; do 
+  echo '{}' | ./test/test-statusline-with-lock.sh & 
+done
+```
+
+**Expected Behavior:**
+- ✅ Only 1 process runs ccusage at a time
+- ✅ Other processes skip gracefully (no pile-up)
+- ✅ Lock files are properly cleaned up
+- ✅ No hanging processes remain
+
+**Verification Commands:**
+```bash
+# Check for stale locks
+ls /tmp/ccusage_statusline.* 2>/dev/null || echo "✅ No locks remain"
+
+# Monitor running processes
+ps aux | grep ccusage | grep -v grep
+```
+
 ## 📊 Stats
 
 <div align="center">
@@ -223,6 +262,22 @@ See our [Contributing Guide](CONTRIBUTING.md) for detailed information.
 
 - **[ccusage](https://github.com/ryoppippi/ccusage)** - Claude Code usage analytics (would not be possible with it!)
 - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** - Official documentation
+
+## 👥 Contributors
+
+We're grateful for all contributions that make cc-statusline better! 
+
+- **[Jonathan Borgwing (@DevVig)](https://github.com/DevVig)** - Critical performance fix for infinite ccusage process spawning ([#4](https://github.com/chongdashu/cc-statusline/pull/4))
+
+### How to Contribute
+
+Want to see your name here? Check out our [Contributing Guide](CONTRIBUTING.md) and help make cc-statusline even better!
+
+We welcome:
+- 🐛 Bug fixes and performance improvements
+- ✨ New features and enhancements  
+- 📚 Documentation improvements
+- 🧪 Test coverage and quality assurance
 
 ## 📝 Changelog
 

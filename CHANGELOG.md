@@ -13,11 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🛡️ **Stability** - Added PID tracking for stale lock detection and cleanup
 - 🔧 **Cross-platform** - Multiple timeout strategies for Linux, macOS, and BSD compatibility
 
+### Contributors
+- 🙏 **Special thanks to [Jonathan Borgwing (@DevVig)](https://github.com/DevVig)** for identifying and implementing the critical process spawning fix ([#4](https://github.com/chongdashu/cc-statusline/pull/4))
+
 ### Technical Details
-- Uses `/tmp/ccusage_statusline.lock` as a mutex to ensure single execution
-- Gracefully skips execution when locked instead of queuing (prevents pile-up)
-- Automatic cleanup of stale locks from crashed processes
-- Fallback timeout mechanism for systems without GNU coreutils
+- **File-based locking**: Uses `/tmp/ccusage_statusline.lock` directory as a mutex to ensure single execution
+- **PID tracking**: Stores process ID in `/tmp/ccusage_statusline.pid` for stale lock detection  
+- **Graceful degradation**: Skips execution when locked instead of queuing (prevents pile-up)
+- **Automatic cleanup**: Detects and removes stale locks from crashed processes using `kill -0`
+- **Cross-platform timeouts**: Multiple timeout strategies (timeout/gtimeout/fallback) for all systems
+- **Testing included**: Comprehensive test suite in `test/` directory to verify locking behavior
 
 ## [1.0.1] - 2025-08-13
 
