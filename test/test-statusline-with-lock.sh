@@ -1,5 +1,20 @@
 #!/bin/bash
-# Test statusline with locking mechanism from PR #4
+# Test script for ccusage process locking mechanism
+# 
+# This script simulates the file-based locking behavior implemented in the
+# ccusage integration to prevent concurrent process spawning.
+#
+# Usage: echo '{}' | ./test/test-statusline-with-lock.sh
+#
+# To test concurrent execution:
+#   for i in {1..10}; do echo '{}' | ./test/test-statusline-with-lock.sh & done
+#
+# Expected behavior:
+# - Only one process should run ccusage at a time
+# - Other processes should skip execution gracefully
+# - No process pile-up or resource leaks should occur
+
+set -euo pipefail
 
 # Mock JSON input handling
 json_input=$(cat)
