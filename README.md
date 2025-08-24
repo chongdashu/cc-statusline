@@ -70,6 +70,13 @@ Enhance your Claude Code terminal with useful information:
 💰 $49.00 ($16.55/h)  📊 14638846 tok (279900 tpm)
 ```
 
+**Unix-Prompt Theme (2-Line Compact):**
+```
+root@cms4life /root $ 🌿 main  🤖 Opus 4.1 (20250805)  📟 v1.0.89  🎨 default
+🧠 83% [========--]  ⌛ 3h 6m [===-------]  💰 $49.00 ($0.91/h)  📊 2.0M (20Ktpm)
+```
+*Features: Unix shell prompt, 33% less vertical space, subtle colors, smart number formatting*
+
 **Compact Mode:**
 ```
 📁 ~/my-app  🌿 main  🤖 Claude Sonnet  📟 v1.0.85
