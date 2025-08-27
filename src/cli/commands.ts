@@ -63,12 +63,12 @@ export async function initCommand(options: InitOptions): Promise<void> {
 
     // Install the statusline
     if (options.install !== false) {
-      const installSpinner = ora('Installing statusline...').start()
+      console.log(chalk.cyan('\n📦 Installing statusline...'))
       
       try {
         await installStatusline(script, resolvedPath, config)
-        installSpinner.succeed('✅ Statusline installed!')
         
+        console.log(chalk.green('\n✅ Statusline installed!'))
         console.log(chalk.green('\n🎉 Success! Your custom statusline is ready!'))
         console.log(chalk.cyan(`\n📁 ${isGlobal ? 'Global' : 'Project'} installation complete: ${chalk.white(resolvedPath)}`))
         console.log(chalk.cyan('\nNext steps:'))
@@ -76,7 +76,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
         console.log(chalk.white('   2. Usage statistics work via: npx ccusage@latest'))
         
       } catch (error) {
-        installSpinner.fail('Failed to install statusline')
+        console.log(chalk.red('\n❌ Failed to install statusline'))
         
         if (error instanceof Error && error.message === 'USER_CANCELLED_OVERWRITE') {
           console.log(chalk.yellow('\n⚠️  Installation cancelled. Existing statusline.sh was not overwritten.'))
