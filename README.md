@@ -16,13 +16,17 @@
 
 ## ⚡ Quick Start
 
-**One command. Two questions. Custom statusline.**
+**One command. Three questions. Custom statusline.**
 
 ```bash
 npx @chongdashu/cc-statusline@latest init
 ```
 
-That's it! Answer 2 simple questions, restart Claude Code, and enjoy your new statusline.
+That's it! Answer a few simple questions, restart Claude Code, and enjoy your new statusline.
+
+### 🆕 Installation Options (v1.2.4+)
+- **🏠 Global Installation** (`~/.claude/`) - Use across all your projects
+- **📂 Project Installation** (`./.claude/`) - Keep settings project-specific
 
 ## 🎯 Simple Setup
 
@@ -91,6 +95,12 @@ cc-statusline preview .claude/statusline.sh
 2. 🧪 **Runs** it with realistic mock data  
 3. 📊 **Shows** exactly what the output will look like
 4. ⚡ **Reports** performance metrics and functionality
+
+### Installation Safety Features (v1.2.4+)
+- 🔒 **Safe Updates** - Never overwrites existing statuslines without confirmation
+- 🛡️ **Settings Protection** - Preserves your existing settings.json configurations
+- ⚠️ **Conflict Detection** - Warns when other statuslines are configured
+- ✅ **Smart Defaults** - Project-level installation by default for safety
 
 ### Custom Installation
 ```bash
