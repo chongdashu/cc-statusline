@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- 🆕 **Installation Location Choice** - Choose between global (`~/.claude`) or project-level (`./.claude`) installation
+- 🔒 **Safe Installation** - Confirmation prompts before overwriting existing statusline.sh files
+- 🛡️ **Settings Protection** - Smart settings.json updates that preserve existing configurations
+- ⚠️ **Conflict Detection** - Warns when other statuslines are already configured
+- ✅ **Better Error Handling** - Clear messages for cancelled installations and conflicts
+
+### Changed
+- Installation prompt now includes location selection (global vs project)
+- Default installation is project-level for safety
+- Improved settings.json update logic to prevent accidental overwrites
+
 ## [1.2.3] - 2025-08-20
 
 ### Fixed

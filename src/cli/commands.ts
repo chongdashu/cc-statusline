@@ -5,6 +5,7 @@ import { installStatusline } from '../utils/installer.js'
 import chalk from 'chalk'
 import ora from 'ora'
 import path from 'path'
+import os from 'os'
 
 interface InitOptions {
   output?: string
@@ -54,8 +55,10 @@ export async function initCommand(options: InitOptions): Promise<void> {
     
     console.log(chalk.white('━'.repeat(60)))
 
-    // Determine output path
-    const outputPath = options.output || `./.claude/${filename}`
+    // Determine output path based on installation location
+    const isGlobal = config.installLocation === 'global'
+    const baseDir = isGlobal ? os.homedir() : '.'
+    const outputPath = options.output || path.join(baseDir, '.claude', filename)
     const resolvedPath = path.resolve(outputPath)
 
     // Install the statusline
@@ -67,7 +70,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
         installSpinner.succeed('✅ Statusline installed!')
         
         console.log(chalk.green('\n🎉 Success! Your custom statusline is ready!'))
-        console.log(chalk.cyan(`\n📁 Generated file: ${chalk.white(resolvedPath)}`))
+        console.log(chalk.cyan(`\n📁 ${isGlobal ? 'Global' : 'Project'} installation complete: ${chalk.white(resolvedPath)}`))
         console.log(chalk.cyan('\nNext steps:'))
         console.log(chalk.white('   1. Restart Claude Code to see your new statusline'))
         console.log(chalk.white('   2. Usage statistics work via: npx ccusage@latest'))
@@ -75,14 +78,17 @@ export async function initCommand(options: InitOptions): Promise<void> {
       } catch (error) {
         installSpinner.fail('Failed to install statusline')
         
-        if (error instanceof Error && error.message === 'SETTINGS_UPDATE_FAILED') {
+        if (error instanceof Error && error.message === 'USER_CANCELLED_OVERWRITE') {
+          console.log(chalk.yellow('\n⚠️  Installation cancelled. Existing statusline.sh was not overwritten.'))
+        } else if (error instanceof Error && error.message === 'SETTINGS_UPDATE_FAILED') {
+          const commandPath = isGlobal ? '~/.claude/statusline.sh' : '.claude/statusline.sh'
           console.log(chalk.yellow('\n⚠️  Settings.json could not be updated automatically.'))
           console.log(chalk.cyan('\nManual Configuration Required:'))
-          console.log(chalk.white('Add this to your .claude/settings.json file:'))
+          console.log(chalk.white(`Add this to your ${isGlobal ? '~/.claude' : '.claude'}/settings.json file:`))
           console.log(chalk.gray('\n{'))
           console.log(chalk.gray('  "statusLine": {'))
           console.log(chalk.gray('    "type": "command",'))
-          console.log(chalk.gray(`    "command": ".claude/statusline.sh",`))
+          console.log(chalk.gray(`    "command": "${commandPath}",`))
           console.log(chalk.gray('    "padding": 0'))
           console.log(chalk.gray('  }'))
           console.log(chalk.gray('}'))

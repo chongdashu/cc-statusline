@@ -8,6 +8,7 @@ export interface StatuslineConfig {
   ccusageIntegration: boolean
   logging: boolean
   customEmojis: boolean
+  installLocation?: 'global' | 'project'
 }
 
 export async function collectConfiguration(): Promise<StatuslineConfig> {
@@ -48,6 +49,16 @@ export async function collectConfiguration(): Promise<StatuslineConfig> {
       name: 'logging',
       message: '\n📝 Enable debug logging to .claude/statusline.log?',
       default: false
+    },
+    {
+      type: 'list',
+      name: 'installLocation',
+      message: '\n📍 Where would you like to install the statusline?',
+      choices: [
+        { name: '🏠 Global (~/.claude) - Use across all projects', value: 'global' },
+        { name: '📂 Project (./.claude) - Only for this project', value: 'project' }
+      ],
+      default: 'project'
     }
   ])
 
@@ -59,7 +70,8 @@ export async function collectConfiguration(): Promise<StatuslineConfig> {
     theme: 'detailed',
     ccusageIntegration: true, // Always enabled since npx works
     logging: config.logging,
-    customEmojis: false
+    customEmojis: false,
+    installLocation: config.installLocation
   } as StatuslineConfig
 }
 
