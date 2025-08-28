@@ -24,9 +24,14 @@ npx @chongdashu/cc-statusline@latest init
 
 That's it! Answer a few simple questions, restart Claude Code, and enjoy your new statusline.
 
-### 🆕 Installation Options (v1.2.7+)
+### 🆕 Installation Options (v1.2.4+)
 - **🏠 Global Installation** (`~/.claude/`) - Use across all your projects
 - **📂 Project Installation** (`./.claude/`) - Keep settings project-specific
+
+### 📈 What's New in v1.3.0
+- **🔥 Improved Burn Rate** - Now calculates $/hour directly from Claude Code data (no ccusage dependency)
+- **📁 Smart Logging** - Logs are created relative to statusline installation location
+- **✨ Version Headers** - Generated statuslines now include the cc-statusline version
 
 ## 🎯 Simple Setup
 

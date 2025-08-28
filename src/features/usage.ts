@@ -30,15 +30,28 @@ session_color() { :; }
 `
 
   return `${colorCode}
-# ---- ccusage integration ----
+# ---- cost and usage extraction ----
 session_txt=""; session_pct=0; session_bar=""
 cost_usd=""; cost_per_hour=""; tpm=""; tot_tokens=""
 
+# Extract cost data from Claude Code input
 if command -v jq >/dev/null 2>&1; then
-  # Run ccusage directly (it has its own internal caching)
+  # Get cost data from Claude Code's input
+  cost_usd=$(echo "$input" | jq -r '.cost.total_cost_usd // empty' 2>/dev/null)
+  total_duration_ms=$(echo "$input" | jq -r '.cost.total_duration_ms // empty' 2>/dev/null)
+  
+  # Calculate burn rate ($/hour) from cost and duration
+  if [ -n "$cost_usd" ] && [ -n "$total_duration_ms" ] && [ "$total_duration_ms" -gt 0 ]; then
+    # Convert ms to hours and calculate rate
+    cost_per_hour=$(echo "$cost_usd $total_duration_ms" | awk '{printf "%.2f", $1 * 3600000 / $2}')
+  fi
+fi
+
+# Get token data and session info from ccusage if available
+if command -v ccusage >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
   blocks_output=""
   
-  # Try ccusage with timeout
+  # Try ccusage with timeout for token data and session info
   if command -v timeout >/dev/null 2>&1; then
     blocks_output=$(timeout 5s ccusage blocks --json 2>/dev/null)
   elif command -v gtimeout >/dev/null 2>&1; then
@@ -50,13 +63,13 @@ if command -v jq >/dev/null 2>&1; then
   fi
   if [ -n "$blocks_output" ]; then
     active_block=$(echo "$blocks_output" | jq -c '.blocks[] | select(.isActive == true)' 2>/dev/null | head -n1)
-    if [ -n "$active_block" ]; then${config.showCost ? `
-      cost_usd=$(echo "$active_block" | jq -r '.costUSD // empty')
-      cost_per_hour=$(echo "$active_block" | jq -r '.burnRate.costPerHour // empty')` : ''}${config.showTokens ? `
-      tot_tokens=$(echo "$active_block" | jq -r '.totalTokens // empty')` : ''}${config.showBurnRate ? `
+    if [ -n "$active_block" ]; then${config.showTokens ? `
+      # Get token count from ccusage
+      tot_tokens=$(echo "$active_block" | jq -r '.totalTokens // empty')` : ''}${config.showBurnRate && config.showTokens ? `
+      # Get tokens per minute from ccusage
       tpm=$(echo "$active_block" | jq -r '.burnRate.tokensPerMinute // empty')` : ''}${config.showSession || config.showProgressBar ? `
       
-      # Session time calculation
+      # Session time calculation from ccusage
       reset_time_str=$(echo "$active_block" | jq -r '.usageLimitResetTime // .endTime // empty')
       start_time_str=$(echo "$active_block" | jq -r '.startTime // empty')
       
