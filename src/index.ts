@@ -3,7 +3,7 @@ import { initCommand } from './cli/commands.js'
 import chalk from 'chalk'
 
 // Hard-code version to avoid bundling issues
-const VERSION = '1.3.0'
+const VERSION = '1.3.2'
 
 const program = new Command()
 
