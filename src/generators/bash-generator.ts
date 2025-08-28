@@ -98,11 +98,11 @@ extract_json_string() {
   field="\${field%% *}"  # Remove any jq operators
   
   # Try to extract string value (quoted)
-  local value=$(echo "$json" | grep -o "\"\${field}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 | sed 's/.*:[[:space:]]*"\\([^"]*\\)".*/\\1/')
+  local value=$(echo "$json" | grep -o "\\"\\$\{field}\\"[[:space:]]*:[[:space:]]*\\"[^\\"]*\\"" | head -1 | sed 's/.*:[[:space:]]*"\\([^"]*\\)".*/\\1/')
   
   # If no string value found, try to extract number value (unquoted)
   if [ -z "$value" ] || [ "$value" = "null" ]; then
-    value=$(echo "$json" | grep -o "\"\${field}\"[[:space:]]*:[[:space:]]*[0-9.]\\+" | head -1 | sed 's/.*:[[:space:]]*\\([0-9.]\\+\\).*/\\1/')
+    value=$(echo "$json" | grep -o "\\"\\$\{field}\\"[[:space:]]*:[[:space:]]*[0-9.]\\+" | head -1 | sed 's/.*:[[:space:]]*\\([0-9.]\\+\\).*/\\1/')
   fi
   
   # Return value or default
