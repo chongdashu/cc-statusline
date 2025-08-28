@@ -100,6 +100,11 @@ extract_json_string() {
   # Try to extract string value (quoted)
   local value=$(echo "$json" | grep -o "\\"\\$\{field}\\"[[:space:]]*:[[:space:]]*\\"[^\\"]*\\"" | head -1 | sed 's/.*:[[:space:]]*"\\([^"]*\\)".*/\\1/')
   
+  # Convert escaped backslashes to forward slashes for Windows paths
+  if [ -n "$value" ]; then
+    value=$(echo "$value" | sed 's/\\\\\\\\/\\//g')
+  fi
+  
   # If no string value found, try to extract number value (unquoted)
   if [ -z "$value" ] || [ "$value" = "null" ]; then
     value=$(echo "$json" | grep -o "\\"\\$\{field}\\"[[:space:]]*:[[:space:]]*[0-9.]\\+" | head -1 | sed 's/.*:[[:space:]]*\\([0-9.]\\+\\).*/\\1/')
@@ -128,18 +133,28 @@ if [ "$HAS_JQ" -eq 1 ]; then${hasDirectory ? `
   output_style=$(echo "$input" | jq -r '.output_style.name // ""' 2>/dev/null)
 else${hasDirectory ? `
   # Bash fallback for JSON extraction
-  # Try workspace.current_dir first, then cwd
-  current_dir=$(extract_json_string "$input" "current_dir" "")
+  # Extract current_dir from workspace object - look for the pattern workspace":{"current_dir":"..."}
+  current_dir=$(echo "$input" | grep -o '"workspace"[[:space:]]*:[[:space:]]*{[^}]*"current_dir"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"current_dir"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/' | sed 's/\\\\\\\\/\\//g')
+  
+  # Fall back to cwd if workspace extraction failed
   if [ -z "$current_dir" ] || [ "$current_dir" = "null" ]; then
-    current_dir=$(extract_json_string "$input" "cwd" "unknown")
+    current_dir=$(echo "$input" | grep -o '"cwd"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"cwd"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/' | sed 's/\\\\\\\\/\\//g')
   fi
+  
+  # Fallback to unknown if all extraction failed
+  [ -z "$current_dir" ] && current_dir="unknown"
   current_dir=$(echo "$current_dir" | sed "s|^$HOME|~|g")` : ''}${hasModel ? `
   
-  model_name=$(extract_json_string "$input" "display_name" "Claude")
-  model_version=$(extract_json_string "$input" "version" "")` : ''}${hasContext ? `
+  # Extract model name from nested model object
+  model_name=$(echo "$input" | grep -o '"model"[[:space:]]*:[[:space:]]*{[^}]*"display_name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"display_name"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/')
+  [ -z "$model_name" ] && model_name="Claude"
+  # Model version is in the model ID, not a separate field  
+  model_version=""  # Not available in Claude Code JSON` : ''}${hasContext ? `
   session_id=$(extract_json_string "$input" "session_id" "")` : ''}
-  cc_version=$(extract_json_string "$input" "version" "")
-  output_style=$(extract_json_string "$input" "name" "")
+  # CC version is at the root level
+  cc_version=$(echo "$input" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/')
+  # Output style is nested
+  output_style=$(echo "$input" | grep -o '"output_style"[[:space:]]*:[[:space:]]*{[^}]*"name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"name"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/')
 fi
 `
 }

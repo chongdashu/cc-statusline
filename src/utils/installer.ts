@@ -90,8 +90,11 @@ async function updateSettingsJson(claudeDir: string, scriptName: string, isGloba
       }
     }
 
-    // Update statusLine configuration
-    const commandPath = isGlobal ? `~/.claude/${scriptName}` : `.claude/${scriptName}`
+    // Update statusLine configuration - Windows needs explicit bash command
+    const commandPath = process.platform === 'win32'
+      ? `bash ${isGlobal ? '.claude' : '.claude'}/${scriptName}`
+      : (isGlobal ? `~/.claude/${scriptName}` : `.claude/${scriptName}`)
+    
     settings.statusLine = {
       type: 'command',
       command: commandPath,

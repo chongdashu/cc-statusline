@@ -35,10 +35,20 @@ session_txt=""; session_pct=0; session_bar=""
 cost_usd=""; cost_per_hour=""; tpm=""; tot_tokens=""
 
 # Extract cost data from Claude Code input
-if command -v jq >/dev/null 2>&1; then
+if [ "$HAS_JQ" -eq 1 ]; then
   # Get cost data from Claude Code's input
   cost_usd=$(echo "$input" | jq -r '.cost.total_cost_usd // empty' 2>/dev/null)
   total_duration_ms=$(echo "$input" | jq -r '.cost.total_duration_ms // empty' 2>/dev/null)
+  
+  # Calculate burn rate ($/hour) from cost and duration
+  if [ -n "$cost_usd" ] && [ -n "$total_duration_ms" ] && [ "$total_duration_ms" -gt 0 ]; then
+    # Convert ms to hours and calculate rate
+    cost_per_hour=$(echo "$cost_usd $total_duration_ms" | awk '{printf "%.2f", $1 * 3600000 / $2}')
+  fi
+else
+  # Bash fallback for cost extraction
+  cost_usd=$(echo "$input" | grep -o '"total_cost_usd"[[:space:]]*:[[:space:]]*[0-9.]*' | sed 's/.*:[[:space:]]*\\([0-9.]*\\).*/\\1/')
+  total_duration_ms=$(echo "$input" | grep -o '"total_duration_ms"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:[[:space:]]*\\([0-9]*\\).*/\\1/')  
   
   # Calculate burn rate ($/hour) from cost and duration
   if [ -n "$cost_usd" ] && [ -n "$total_duration_ms" ] && [ "$total_duration_ms" -gt 0 ]; then
