@@ -24,6 +24,12 @@ npm run dev
 
 # Test as if installed globally
 npx . init
+
+# Test the generated statusline with mock data
+./test_debug.sh
+
+# Run installation tests
+./test/test-installation.sh
 ```
 
 ## Architecture
@@ -53,6 +59,15 @@ Key design patterns:
 4. Updates `.claude/settings.json` to register the statusline command
 
 **Testing Approach**: Preview command uses mock Claude Code JSON data to test statuslines before installation. Real testing requires manual verification with Claude Code running.
+
+## Critical Bug-Prone Areas
+
+**JSON Parsing in Bash**: The `bash-generator.ts` file contains a fallback JSON parser for systems without `jq`. This uses complex grep/sed patterns with careful quote escaping. The quotes in the grep patterns must be escaped as `\\"` in the TypeScript template strings to generate valid bash code.
+
+**Quote Escaping in bash-generator.ts**: Lines 100-105 contain grep patterns that require double escaping:
+- TypeScript template literal needs `\\` for a single backslash
+- Bash needs `\"` for escaped quotes
+- Combined: `\\"\\${field}\\"` to produce `"${field}"` in the final bash script
 
 ## Important Conventions
 

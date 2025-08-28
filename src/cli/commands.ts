@@ -6,10 +6,79 @@ import chalk from 'chalk'
 import ora from 'ora'
 import path from 'path'
 import os from 'os'
+import { execSync } from 'child_process'
 
 interface InitOptions {
   output?: string
   install?: boolean
+}
+
+function checkJqInstallation(): boolean {
+  try {
+    execSync('command -v jq', { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function getJqInstallInstructions(): string {
+  const platform = process.platform
+  
+  if (platform === 'darwin') {
+    return `
+${chalk.cyan('📦 Install jq for better performance and reliability:')}
+
+${chalk.green('Using Homebrew (recommended):')}
+  brew install jq
+
+${chalk.green('Using MacPorts:')}
+  sudo port install jq
+
+${chalk.green('Or download directly:')}
+  https://github.com/jqlang/jq/releases
+`
+  } else if (platform === 'linux') {
+    return `
+${chalk.cyan('📦 Install jq for better performance and reliability:')}
+
+${chalk.green('Ubuntu/Debian:')}
+  sudo apt-get install jq
+
+${chalk.green('CentOS/RHEL/Fedora:')}
+  sudo yum install jq
+
+${chalk.green('Arch Linux:')}
+  sudo pacman -S jq
+
+${chalk.green('Or download directly:')}
+  https://github.com/jqlang/jq/releases
+`
+  } else if (platform === 'win32') {
+    return `
+${chalk.cyan('📦 Install jq for better performance and reliability:')}
+
+${chalk.green('Option 1: Using Package Manager')}
+  ${chalk.dim('Chocolatey:')} choco install jq
+  ${chalk.dim('Scoop:')} scoop install jq
+
+${chalk.green('Option 2: Manual Download')}
+  1. Download from: https://github.com/jqlang/jq/releases/latest
+  2. Choose file:
+     ${chalk.dim('• 64-bit Windows:')} jq-windows-amd64.exe
+     ${chalk.dim('• 32-bit Windows:')} jq-windows-i386.exe
+  3. Rename to: jq.exe
+  4. Move to: C:\\Windows\\System32\\ ${chalk.dim('(or add to PATH)')}
+  5. Test: Open new terminal and run: jq --version
+`
+  } else {
+    return `
+${chalk.cyan('📦 Install jq for better performance and reliability:')}
+
+${chalk.green('Download for your platform:')}
+  https://github.com/jqlang/jq/releases
+`
+  }
 }
 
 export async function initCommand(options: InitOptions): Promise<void> {
@@ -17,6 +86,31 @@ export async function initCommand(options: InitOptions): Promise<void> {
     const spinner = ora('Initializing statusline generator...').start()
     await new Promise(resolve => setTimeout(resolve, 500)) // Brief pause for UX
     spinner.stop()
+
+    // Check for jq installation
+    const hasJq = checkJqInstallation()
+    if (!hasJq) {
+      console.log(chalk.yellow('\n⚠️  jq is not installed'))
+      console.log(chalk.dim('Your statusline will work without jq, but with limited functionality:'))
+      console.log(chalk.dim('  • Context remaining percentage won\'t be displayed'))
+      console.log(chalk.dim('  • Token statistics may not work'))
+      console.log(chalk.dim('  • Performance will be slower'))
+      console.log(getJqInstallInstructions())
+      
+      // Ask if they want to continue without jq
+      const inquirer = (await import('inquirer')).default
+      const { continueWithoutJq } = await inquirer.prompt([{
+        type: 'confirm',
+        name: 'continueWithoutJq',
+        message: 'Continue without jq?',
+        default: true
+      }])
+      
+      if (!continueWithoutJq) {
+        console.log(chalk.cyan('\n👍 Install jq and run this command again'))
+        process.exit(0)
+      }
+    }
 
     // Collect user configuration
     const config = await collectConfiguration()

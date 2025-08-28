@@ -14,15 +14,76 @@
 
 </div>
 
+## ⚠️ IMPORTANT: Install jq First!
+
+> **Without jq, your statusline will have LIMITED functionality:**
+> - ❌ No context remaining percentage
+> - ❌ No token statistics from ccusage
+> - ❌ Slower performance
+> - ❌ Less reliable JSON parsing
+
+### Install jq (takes 30 seconds):
+
+#### macOS
+```bash
+brew install jq
+```
+
+#### Linux
+```bash
+# Ubuntu/Debian
+sudo apt-get install jq
+
+# CentOS/RHEL
+sudo yum install jq
+```
+
+#### Windows 10/11 Users
+
+**Option 1: Package Manager (Easiest)**
+```bash
+# If you have Chocolatey
+choco install jq
+
+# If you have Scoop
+scoop install jq
+```
+
+**Option 2: Manual Download (No admin required)**
+1. Go to https://github.com/jqlang/jq/releases/latest
+2. Download the right file for your system:
+   - **64-bit Windows** (most common): Download `jq-windows-amd64.exe`
+   - **32-bit Windows** (older systems): Download `jq-windows-i386.exe`
+3. Rename the downloaded file to just `jq.exe`
+4. Move `jq.exe` to one of these locations:
+   - `C:\Windows\System32\` (requires admin) - works everywhere
+   - Or create `C:\tools\` and add it to your PATH
+5. **Add to PATH** (if not in System32):
+   - Press `Win + X`, select "System"
+   - Click "Advanced system settings"
+   - Click "Environment Variables"
+   - Under "User variables", select "Path" and click "Edit"
+   - Click "New" and add `C:\tools\` (or wherever you put jq.exe)
+   - Click OK on all windows
+6. **Test it**: Open a new Command Prompt or PowerShell and type `jq --version`
+
+📦 **Direct downloads:** https://github.com/jqlang/jq/releases
+
+---
+
 ## ⚡ Quick Start
 
-**One command. Three questions. Custom statusline.**
+**After installing jq, one command. Three questions. Custom statusline.**
 
 ```bash
 npx @chongdashu/cc-statusline@latest init
 ```
 
 That's it! Answer a few simple questions, restart Claude Code, and enjoy your new statusline.
+
+### 📋 Prerequisites
+- **Node.js 16+** (required)
+- **jq** (STRONGLY recommended) - Required for context tracking, token stats, and reliable performance
 
 ### 🆕 Installation Options (v1.2.4+)
 - **🏠 Global Installation** (`~/.claude/`) - Use across all your projects
@@ -39,15 +100,17 @@ That's it! Answer a few simple questions, restart Claude Code, and enjoy your ne
 
 ## ✨ What You Get
 
+⚠️ **Note: Most features require jq to be installed!**
+
 Enhance your Claude Code terminal with useful information:
 
 - **📁 Directory Display** - Current folder with `~` abbreviation
 - **🌿 Git Integration** - Current branch name  
 - **🤖 Model Info** - Shows which Claude model you're using plus Claude Code version
-- **🧠 Context Usage** - Real-time context window usage with progress bars
-- **💰 Cost Tracking** - Live cost monitoring with burn rates via ccusage
-- **⌛ Session Timer** - Time remaining until usage limit resets
-- **📊 Token Analytics** - Token consumption and burn rate metrics
+- **🧠 Context Usage** - Real-time context window usage with progress bars **(requires jq)**
+- **💰 Cost Tracking** - Live cost monitoring with burn rates via ccusage **(partial without jq)**
+- **⌛ Session Timer** - Time remaining until usage limit resets **(requires jq)**
+- **📊 Token Analytics** - Token consumption and burn rate metrics **(requires jq)**
 - **🎨 Color Support** - 256-color palette for Claude Code terminals
 - **⚡ Fast Execution** - Optimized bash script with <100ms execution time
 
