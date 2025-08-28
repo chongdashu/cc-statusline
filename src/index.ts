@@ -2,12 +2,15 @@ import { Command } from 'commander'
 import { initCommand } from './cli/commands.js'
 import chalk from 'chalk'
 
+// Hard-code version to avoid bundling issues
+const VERSION = '1.3.0'
+
 const program = new Command()
 
 program
   .name('cc-statusline')
   .description('Interactive CLI tool for generating custom Claude Code statuslines')
-  .version('1.2.6')
+  .version(VERSION)
 
 program
   .command('init')

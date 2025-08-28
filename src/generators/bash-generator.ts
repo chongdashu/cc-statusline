@@ -2,14 +2,9 @@ import { StatuslineConfig } from '../cli/prompts.js'
 import { generateColorBashCode, generateBasicColors } from '../features/colors.js'
 import { generateGitBashCode, generateGitDisplayCode, generateGitUtilities } from '../features/git.js'
 import { generateUsageBashCode, generateUsageDisplayCode, generateUsageUtilities } from '../features/usage.js'
-import { readFileSync } from 'fs'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-const packageJson = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8'))
-const VERSION = packageJson.version
+// Version will be updated when releasing
+const VERSION = '1.3.1'
 
 export function generateBashStatusline(config: StatuslineConfig): string {
   const hasGit = config.features.includes('git')
@@ -62,7 +57,9 @@ ${generateDisplaySection(config, gitConfig, usageConfig)}
 
 function generateLoggingCode(): string {
   return `
-LOG_FILE="\${HOME}/.claude/statusline.log"
+# Get the directory where this statusline script is located
+SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+LOG_FILE="\${SCRIPT_DIR}/statusline.log"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 
 # ---- check jq availability ----
