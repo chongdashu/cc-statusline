@@ -14,6 +14,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed cost data extraction without jq
   - Generator now uses `bash .claude/statusline.sh` command in settings.json for Windows
 
+## [1.3.1] - 2025-08-28
+
+### Fixed
+- 🐛 **Critical: Bash JSON Fallback Parser** - Fixed syntax error in fallback JSON parser for systems without jq
+  - Fixed malformed grep patterns with incorrect quote escaping in `bash-generator.ts`
+  - Statusline now works correctly on systems without jq installed
+  - Properly escapes quotes in generated bash script (`\"${field}\"` instead of `"${field}"`)
+
+### Added
+- ✨ **jq Detection and Installation Guide** - Added automatic jq detection during init
+  - Checks if jq is installed and warns about limited functionality without it
+  - Provides platform-specific installation instructions (macOS, Linux, Windows)
+  - Asks users if they want to continue without jq
+  - Clear documentation in README about which features require jq
+
+### Changed
+- 📚 **Enhanced Windows Documentation** - Clarified jq installation for Windows users
+  - Specific file names for download (`jq-windows-amd64.exe` for 64-bit)
+  - Step-by-step PATH configuration instructions
+  - Clear options between package managers and manual installation
+
 ## [1.3.0] - 2025-08-28
 
 ### Changed

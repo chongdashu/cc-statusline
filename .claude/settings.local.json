@@ -1,0 +1,20 @@
+{
+  "env": {
+    "CONTEXT7_API_KEY": "ctx7sk-6ac2f7e9-685d-445c-aaab-6cbfc1fca9f7"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(./dist/index.js preview ./.claude/statusline.sh)",
+      "Bash(bash:*)",
+      "Bash(choco install:*)",
+      "Bash(winget install:*)",
+      "Bash(curl:*)",
+      "Bash(chmod:*)",
+      "Bash(npm run build:*)",
+      "Bash(./dist/index.js init --no-install)",
+      "Bash(git pull:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
