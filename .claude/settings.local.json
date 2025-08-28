@@ -12,7 +12,10 @@
       "Bash(chmod:*)",
       "Bash(npm run build:*)",
       "Bash(./dist/index.js init --no-install)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(npm install)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
