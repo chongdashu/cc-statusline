@@ -14,76 +14,15 @@
 
 </div>
 
-## ⚠️ IMPORTANT: Install jq First!
-
-> **Without jq, your statusline will have LIMITED functionality:**
-> - ❌ No context remaining percentage
-> - ❌ No token statistics from ccusage
-> - ❌ Slower performance
-> - ❌ Less reliable JSON parsing
-
-### Install jq (takes 30 seconds):
-
-#### macOS
-```bash
-brew install jq
-```
-
-#### Linux
-```bash
-# Ubuntu/Debian
-sudo apt-get install jq
-
-# CentOS/RHEL
-sudo yum install jq
-```
-
-#### Windows 10/11 Users
-
-**Option 1: Package Manager (Easiest)**
-```bash
-# If you have Chocolatey
-choco install jq
-
-# If you have Scoop
-scoop install jq
-```
-
-**Option 2: Manual Download (No admin required)**
-1. Go to https://github.com/jqlang/jq/releases/latest
-2. Download the right file for your system:
-   - **64-bit Windows** (most common): Download `jq-windows-amd64.exe`
-   - **32-bit Windows** (older systems): Download `jq-windows-i386.exe`
-3. Rename the downloaded file to just `jq.exe`
-4. Move `jq.exe` to one of these locations:
-   - `C:\Windows\System32\` (requires admin) - works everywhere
-   - Or create `C:\tools\` and add it to your PATH
-5. **Add to PATH** (if not in System32):
-   - Press `Win + X`, select "System"
-   - Click "Advanced system settings"
-   - Click "Environment Variables"
-   - Under "User variables", select "Path" and click "Edit"
-   - Click "New" and add `C:\tools\` (or wherever you put jq.exe)
-   - Click OK on all windows
-6. **Test it**: Open a new Command Prompt or PowerShell and type `jq --version`
-
-📦 **Direct downloads:** https://github.com/jqlang/jq/releases
-
----
-
 ## ⚡ Quick Start
 
-**After installing jq, one command. Three questions. Custom statusline.**
+**One command. Three questions. Custom statusline.**
 
 ```bash
 npx @chongdashu/cc-statusline@latest init
 ```
 
 That's it! Answer a few simple questions, restart Claude Code, and enjoy your new statusline.
-
-### 📋 Prerequisites
-- **Node.js 16+** (required)
-- **jq** (STRONGLY recommended) - Required for context tracking, token stats, and reliable performance
 
 ### 🆕 Installation Options (v1.2.4+)
 - **🏠 Global Installation** (`~/.claude/`) - Use across all your projects
@@ -99,8 +38,6 @@ That's it! Answer a few simple questions, restart Claude Code, and enjoy your ne
 <img src="docs/images/cc-statusline-init.gif" alt="Demo of cc-statusline setup" width="500">
 
 ## ✨ What You Get
-
-⚠️ **Note: Most features require jq to be installed!**
 
 Enhance your Claude Code terminal with useful information:
 
@@ -199,20 +136,20 @@ npm install -g @chongdashu/cc-statusline
 - **📦 Zero Dependencies** - Self-contained script with graceful fallbacks
 - **🔒 Secure** - No network requests except ccusage integration
 
-## 📋 Requirements
+## 📋 Prerequisites
 
-### ✅ Required (You Already Have These!)
+### Required
+- **Node.js 16+** - Required for the CLI tool
 - **Claude Code** - The tool you're already using
-- **jq** - JSON processing (pre-installed on most systems)
 
-### 🎁 Optional Enhancements
+### Strongly Recommended
+- **jq** - JSON processor for advanced features (see installation guide below)
+  - Required for: context tracking, token stats, session timer
+  - Without jq: basic features still work with fallback parser
+
+### Optional
 - **git** - For branch display (you probably have this)
 - **ccusage** - For usage stats (works via `npx` - no install needed)
-
-### Quick Compatibility Check
-```bash
-command -v jq && echo "✅ Ready to go!"
-```
 
 ## 📂 File Structure
 
@@ -251,7 +188,7 @@ If auto-configuration fails, simply add this to `.claude/settings.json`:
 - **Disable ccusage**: Remove usage tracking if not needed
 
 ### 🧩 Missing Features
-- **Install jq**: `brew install jq` (macOS) or `apt install jq` (Ubuntu)
+- **Install jq**: See the jq installation guide below
 - **ccusage setup**: Works automatically via `npx ccusage@latest`
 - **Git not found**: Install git for branch display
 - **Context not showing**: Ensure you're in an active Claude Code session with context usage
@@ -335,6 +272,62 @@ ps aux | grep ccusage | grep -v grep
 ![npm downloads](https://img.shields.io/npm/dm/@chongdashu/cc-statusline)
 
 </div>
+
+## 📦 Installing jq (Recommended)
+
+> **Without jq, your statusline will have LIMITED functionality:**
+> - ❌ No context remaining percentage
+> - ❌ No token statistics from ccusage  
+> - ❌ No session timer
+> - ⚠️ Basic fallback parser is used (less reliable)
+
+### Quick Install (30 seconds):
+
+#### macOS
+```bash
+brew install jq
+```
+
+#### Linux
+```bash
+# Ubuntu/Debian
+sudo apt-get install jq
+
+# CentOS/RHEL/Fedora
+sudo yum install jq
+
+# Arch Linux
+sudo pacman -S jq
+```
+
+#### Windows 10/11
+
+**Option 1: Package Manager (Recommended)**
+```bash
+# Chocolatey
+choco install jq
+
+# Scoop
+scoop install jq
+
+# Winget
+winget install jqlang.jq
+```
+
+**Option 2: Manual Download**
+1. Go to https://github.com/jqlang/jq/releases/latest
+2. Download:
+   - **64-bit**: `jq-windows-amd64.exe`
+   - **32-bit**: `jq-windows-i386.exe`
+3. Rename to `jq.exe`
+4. Place in `C:\Windows\System32\` (requires admin) or add to PATH
+5. Test: `jq --version`
+
+### Verify Installation
+```bash
+jq --version
+# Should output: jq-1.6 or higher
+```
 
 ## 🔗 Related Projects
 
