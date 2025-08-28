@@ -24,7 +24,7 @@ npx @chongdashu/cc-statusline@latest init
 
 That's it! Answer a few simple questions, restart Claude Code, and enjoy your new statusline.
 
-### 🆕 Installation Options (v1.2.4+)
+### 🆕 Installation Options (v1.2.7+)
 - **🏠 Global Installation** (`~/.claude/`) - Use across all your projects
 - **📂 Project Installation** (`./.claude/`) - Keep settings project-specific
 

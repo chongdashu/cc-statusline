@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.7] - 2025-08-28
+
+### Fixed
+- 🐛 **ccusage Integration Fix** - Fixed ccusage stats not displaying in statusline
+  - Moved `input=$(cat)` before logging to ensure proper input capture
+  - Simplified ccusage execution by removing complex locking mechanism
+  - Now properly calls `ccusage blocks --json` directly with internal caching
+  - Fixed cost display, burn rate, token stats, and session time display
+
 ## [1.2.6] - 2025-08-27
 
 ### Fixed

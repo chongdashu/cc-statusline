@@ -34,8 +34,8 @@ export function generateBashStatusline(config: StatuslineConfig): string {
 # Custom Claude Code statusline - Created: ${timestamp}
 # Theme: ${config.theme} | Colors: ${config.colors} | Features: ${config.features.join(', ')}
 
-${config.logging ? generateLoggingCode() : ''}
 input=$(cat)
+${config.logging ? generateLoggingCode() : ''}
 ${generateColorBashCode({ enabled: config.colors, theme: config.theme })}
 ${config.colors ? generateBasicColors() : ''}
 ${hasUsage ? generateUsageUtilities() : ''}

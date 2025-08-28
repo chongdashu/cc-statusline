@@ -35,58 +35,18 @@ session_txt=""; session_pct=0; session_bar=""
 cost_usd=""; cost_per_hour=""; tpm=""; tot_tokens=""
 
 if command -v jq >/dev/null 2>&1; then
-  # Implement file-based locking to prevent concurrent executions
-  LOCK_FILE="/tmp/ccusage_statusline.lock"
-  LOCK_PID_FILE="/tmp/ccusage_statusline.pid"
+  # Run ccusage directly (it has its own internal caching)
+  blocks_output=""
   
-  # Function to check if process is still running
-  is_process_running() {
-    local pid=$1
-    if [ -z "$pid" ]; then return 1; fi
-    # Check if process exists (works on Linux, macOS, BSD)
-    kill -0 "$pid" 2>/dev/null
-  }
-  
-  # Try to acquire lock
-  if mkdir "$LOCK_FILE" 2>/dev/null; then
-    # Lock acquired, save our PID
-    echo $$ > "$LOCK_PID_FILE"
-    
-    # Run ccusage with timeout
-    if command -v timeout >/dev/null 2>&1; then
-      blocks_output=$(timeout 3s npx ccusage@latest blocks --json 2>/dev/null || timeout 3s ccusage blocks --json 2>/dev/null)
-    elif command -v gtimeout >/dev/null 2>&1; then
-      # macOS with coreutils installed
-      blocks_output=$(gtimeout 3s npx ccusage@latest blocks --json 2>/dev/null || gtimeout 3s ccusage blocks --json 2>/dev/null)
-    else
-      # Fallback: use background process with sleep-based timeout
-      (npx ccusage@latest blocks --json 2>/dev/null || ccusage blocks --json 2>/dev/null) &
-      ccusage_pid=$!
-      sleep 3
-      if kill -0 "$ccusage_pid" 2>/dev/null; then
-        kill "$ccusage_pid" 2>/dev/null
-        blocks_output=""
-      else
-        wait "$ccusage_pid"
-        blocks_output=$(cat)
-      fi
-    fi
-    
-    # Clean up lock
-    rm -f "$LOCK_PID_FILE" 2>/dev/null
-    rmdir "$LOCK_FILE" 2>/dev/null
+  # Try ccusage with timeout
+  if command -v timeout >/dev/null 2>&1; then
+    blocks_output=$(timeout 5s ccusage blocks --json 2>/dev/null)
+  elif command -v gtimeout >/dev/null 2>&1; then
+    # macOS with coreutils installed
+    blocks_output=$(gtimeout 5s ccusage blocks --json 2>/dev/null)
   else
-    # Lock exists, check if it's stale
-    if [ -f "$LOCK_PID_FILE" ]; then
-      old_pid=$(cat "$LOCK_PID_FILE" 2>/dev/null)
-      if ! is_process_running "$old_pid"; then
-        # Stale lock, clean it up
-        rm -f "$LOCK_PID_FILE" 2>/dev/null
-        rmdir "$LOCK_FILE" 2>/dev/null
-      fi
-    fi
-    # Skip ccusage call to prevent pile-up
-    blocks_output=""
+    # No timeout available, run directly (ccusage should be fast)
+    blocks_output=$(ccusage blocks --json 2>/dev/null)
   fi
   if [ -n "$blocks_output" ]; then
     active_block=$(echo "$blocks_output" | jq -c '.blocks[] | select(.isActive == true)' 2>/dev/null | head -n1)
