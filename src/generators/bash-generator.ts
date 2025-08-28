@@ -4,7 +4,7 @@ import { generateGitBashCode, generateGitDisplayCode, generateGitUtilities } fro
 import { generateUsageBashCode, generateUsageDisplayCode, generateUsageUtilities } from '../features/usage.js'
 
 // Version will be updated when releasing
-const VERSION = '1.3.1'
+const VERSION = '1.3.2'
 
 export function generateBashStatusline(config: StatuslineConfig): string {
   const hasGit = config.features.includes('git')
