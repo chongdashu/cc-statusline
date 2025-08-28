@@ -24,14 +24,72 @@ npx @chongdashu/cc-statusline@latest init
 
 That's it! Answer a few simple questions, restart Claude Code, and enjoy your new statusline.
 
-### 🆕 Installation Options (v1.2.4+)
-- **🏠 Global Installation** (`~/.claude/`) - Use across all your projects
-- **📂 Project Installation** (`./.claude/`) - Keep settings project-specific
+## 📋 Prerequisites
 
-### 📈 What's New in v1.3.0
-- **🔥 Improved Burn Rate** - Now calculates $/hour directly from Claude Code data (no ccusage dependency)
-- **📁 Smart Logging** - Logs are created relative to statusline installation location
-- **✨ Version Headers** - Generated statuslines now include the cc-statusline version
+### Required
+- **Node.js 16+** - Required for the CLI tool
+- **Claude Code** - The tool you're already using
+
+### Strongly Recommended
+- **jq** - JSON processor for advanced features (see installation guide below)
+  - Required for: context tracking, token stats, session timer
+  - Without jq: basic features still work with fallback parser
+
+> **Without jq, your statusline will have LIMITED functionality:**
+> - ❌ No context remaining percentage
+> - ❌ No token statistics from ccusage  
+> - ❌ No session timer
+> - ⚠️ Basic fallback parser is used (less reliable)
+
+#### macOS
+```bash
+brew install jq
+```
+
+#### Linux
+```bash
+# Ubuntu/Debian
+sudo apt-get install jq
+
+# CentOS/RHEL/Fedora
+sudo yum install jq
+
+# Arch Linux
+sudo pacman -S jq
+```
+
+#### Windows 10/11
+
+**Option 1: Package Manager (Recommended)**
+```bash
+# Chocolatey
+choco install jq
+
+# Scoop
+scoop install jq
+
+# Winget
+winget install jqlang.jq
+```
+
+**Option 2: Manual Download**
+1. Go to https://github.com/jqlang/jq/releases/latest
+2. Download:
+   - **64-bit**: `jq-windows-amd64.exe`
+   - **32-bit**: `jq-windows-i386.exe`
+3. Rename to `jq.exe`
+4. Place in `C:\Windows\System32\` (requires admin) or add to PATH
+5. Test: `jq --version`
+
+### Verify Installation
+```bash
+jq --version
+# Should output: jq-1.6 or higher
+```
+
+### Optional
+- **git** - For branch display (you probably have this)
+- **ccusage** - For usage stats (works via `npx` - no install needed)
 
 ## 🎯 Simple Setup
 
@@ -52,6 +110,10 @@ Enhance your Claude Code terminal with useful information:
 - **⚡ Fast Execution** - Optimized bash script with <100ms execution time
 
 ## 🎛️ Features Overview
+
+### 🆕 Installation Options (v1.2.4+)
+- **🏠 Global Installation** (`~/.claude/`) - Use across all your projects
+- **📂 Project Installation** (`./.claude/`) - Keep settings project-specific
 
 ### 🔥 Default Features (All Pre-selected in v1.2.2+)
 | Feature | Description | Example |
@@ -136,20 +198,7 @@ npm install -g @chongdashu/cc-statusline
 - **📦 Zero Dependencies** - Self-contained script with graceful fallbacks
 - **🔒 Secure** - No network requests except ccusage integration
 
-## 📋 Prerequisites
 
-### Required
-- **Node.js 16+** - Required for the CLI tool
-- **Claude Code** - The tool you're already using
-
-### Strongly Recommended
-- **jq** - JSON processor for advanced features (see installation guide below)
-  - Required for: context tracking, token stats, session timer
-  - Without jq: basic features still work with fallback parser
-
-### Optional
-- **git** - For branch display (you probably have this)
-- **ccusage** - For usage stats (works via `npx` - no install needed)
 
 ## 📂 File Structure
 
@@ -273,61 +322,7 @@ ps aux | grep ccusage | grep -v grep
 
 </div>
 
-## 📦 Installing jq (Recommended)
 
-> **Without jq, your statusline will have LIMITED functionality:**
-> - ❌ No context remaining percentage
-> - ❌ No token statistics from ccusage  
-> - ❌ No session timer
-> - ⚠️ Basic fallback parser is used (less reliable)
-
-### Quick Install (30 seconds):
-
-#### macOS
-```bash
-brew install jq
-```
-
-#### Linux
-```bash
-# Ubuntu/Debian
-sudo apt-get install jq
-
-# CentOS/RHEL/Fedora
-sudo yum install jq
-
-# Arch Linux
-sudo pacman -S jq
-```
-
-#### Windows 10/11
-
-**Option 1: Package Manager (Recommended)**
-```bash
-# Chocolatey
-choco install jq
-
-# Scoop
-scoop install jq
-
-# Winget
-winget install jqlang.jq
-```
-
-**Option 2: Manual Download**
-1. Go to https://github.com/jqlang/jq/releases/latest
-2. Download:
-   - **64-bit**: `jq-windows-amd64.exe`
-   - **32-bit**: `jq-windows-i386.exe`
-3. Rename to `jq.exe`
-4. Place in `C:\Windows\System32\` (requires admin) or add to PATH
-5. Test: `jq --version`
-
-### Verify Installation
-```bash
-jq --version
-# Should output: jq-1.6 or higher
-```
 
 ## 🔗 Related Projects
 
