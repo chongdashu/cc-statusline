@@ -34,7 +34,7 @@ session_color() { :; }
 session_txt=""; session_pct=0; session_bar=""
 cost_usd=""; cost_per_hour=""; tpm=""; tot_tokens=""
 
-if command -v jq >/dev/null 2>&1; then
+if command -v ccusage >/dev/null 2>&1 && [ "$HAS_JQ" -eq 1 ]; then
   # Run ccusage directly (it has its own internal caching)
   blocks_output=""
   
