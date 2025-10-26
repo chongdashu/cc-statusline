@@ -191,8 +191,10 @@ if [ -n "$session_id" ] && [ "$HAS_JQ" -eq 1 ]; then
   MAX_CONTEXT=$(get_max_context "$model_name")
   
   # Convert current dir to session file path
-  project_dir=$(echo "$current_dir" | sed "s|~|$HOME|g" | sed 's|/|-|g' | sed 's|^-||')
-  session_file="$HOME/.claude/projects/-\${project_dir}/\${session_id}.jsonl"
+  # Windows: C:\\Users\\... or C:/Users/... → C--Users-... (colon and slashes become dashes)
+  # Unix: /home/user/... → -home-user-... (leading dash, slashes to dashes)
+  project_dir=$(echo "$current_dir" | sed "s|~|$HOME|g" | sed 's|:|-|g' | sed 's|[\\\\\/]|-|g')
+  session_file="$HOME/.claude/projects/\${project_dir}/\${session_id}.jsonl"
   
   if [ -f "$session_file" ]; then
     # Get the latest input token count from the session file
