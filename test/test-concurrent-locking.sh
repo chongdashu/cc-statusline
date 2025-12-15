@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Comprehensive test for concurrent ccusage locking mechanism
 #
 # This script tests the locking mechanism under various scenarios:

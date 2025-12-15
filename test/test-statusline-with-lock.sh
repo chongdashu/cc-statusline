@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Test script for ccusage process locking mechanism
 # 
 # This script simulates the file-based locking behavior implemented in the

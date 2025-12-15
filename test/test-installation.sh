@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Test script for cc-statusline installation scenarios
 # Tests both global and project-level installations
@@ -127,7 +127,7 @@ test_no_files_global() {
   mkdir -p "$FAKE_GLOBAL_CLAUDE"
   
   # Simulate installation
-  echo '#!/bin/bash' > "$FAKE_GLOBAL_CLAUDE/statusline.sh"
+  echo '#!/usr/bin/env bash' > "$FAKE_GLOBAL_CLAUDE/statusline.sh"
   echo 'echo "test statusline"' >> "$FAKE_GLOBAL_CLAUDE/statusline.sh"
   chmod +x "$FAKE_GLOBAL_CLAUDE/statusline.sh"
   
@@ -155,7 +155,7 @@ test_no_files_project() {
   mkdir -p "$FAKE_PROJECT_CLAUDE"
   
   # Simulate installation
-  echo '#!/bin/bash' > "$FAKE_PROJECT_CLAUDE/statusline.sh"
+  echo '#!/usr/bin/env bash' > "$FAKE_PROJECT_CLAUDE/statusline.sh"
   echo 'echo "test statusline"' >> "$FAKE_PROJECT_CLAUDE/statusline.sh"
   chmod +x "$FAKE_PROJECT_CLAUDE/statusline.sh"
   
@@ -181,7 +181,7 @@ test_statusline_exists_global() {
   
   # Create existing statusline
   mkdir -p "$FAKE_GLOBAL_CLAUDE"
-  echo '#!/bin/bash' > "$FAKE_GLOBAL_CLAUDE/statusline.sh"
+  echo '#!/usr/bin/env bash' > "$FAKE_GLOBAL_CLAUDE/statusline.sh"
   echo 'echo "old statusline"' >> "$FAKE_GLOBAL_CLAUDE/statusline.sh"
   chmod +x "$FAKE_GLOBAL_CLAUDE/statusline.sh"
   
@@ -210,7 +210,7 @@ test_both_exist_global() {
   
   # Create existing files
   mkdir -p "$FAKE_GLOBAL_CLAUDE"
-  echo '#!/bin/bash' > "$FAKE_GLOBAL_CLAUDE/statusline.sh"
+  echo '#!/usr/bin/env bash' > "$FAKE_GLOBAL_CLAUDE/statusline.sh"
   echo 'echo "old statusline"' >> "$FAKE_GLOBAL_CLAUDE/statusline.sh"
   chmod +x "$FAKE_GLOBAL_CLAUDE/statusline.sh"
   
@@ -252,7 +252,7 @@ test_different_statusline_configured() {
 EOF
   
   # Simulate installation
-  echo '#!/bin/bash' > "$FAKE_PROJECT_CLAUDE/statusline.sh"
+  echo '#!/usr/bin/env bash' > "$FAKE_PROJECT_CLAUDE/statusline.sh"
   echo 'echo "new statusline"' >> "$FAKE_PROJECT_CLAUDE/statusline.sh"
   chmod +x "$FAKE_PROJECT_CLAUDE/statusline.sh"
   
@@ -272,7 +272,7 @@ test_create_in_empty_directory() {
   
   # Simulate installation
   mkdir -p "$FAKE_PROJECT_CLAUDE"
-  echo '#!/bin/bash' > "$FAKE_PROJECT_CLAUDE/statusline.sh"
+  echo '#!/usr/bin/env bash' > "$FAKE_PROJECT_CLAUDE/statusline.sh"
   echo 'echo "test statusline"' >> "$FAKE_PROJECT_CLAUDE/statusline.sh"
   chmod +x "$FAKE_PROJECT_CLAUDE/statusline.sh"
   
