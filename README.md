@@ -326,8 +326,9 @@ ps aux | grep ccusage | grep -v grep
 
 ## 🔗 Related Projects
 
-- **[ccusage](https://github.com/ryoppippi/ccusage)** - Claude Code usage analytics (would not be possible with it!)
+- **[ccusage](https://github.com/ryoppippi/ccusage)** - Claude Code usage analytics (would not be possible without it!)
 - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** - Official documentation
+- **[tweakcc](https://github.com/Piebald-AI/tweakcc)** - Command-line tool to customize your Claude Code themes, thinking verbs, and more.
 
 ## 👥 Contributors
 
