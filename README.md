@@ -30,16 +30,13 @@ That's it! Answer a few simple questions, restart Claude Code, and enjoy your ne
 - **Node.js 16+** - Required for the CLI tool
 - **Claude Code** - The tool you're already using
 
-### Strongly Recommended
-- **jq** - JSON processor for advanced features (see installation guide below)
-  - Required for: context tracking, token stats, session timer
-  - Without jq: basic features still work with fallback parser
+### Recommended
+- **jq** - JSON processor for reliable data parsing (see installation guide below)
+  - Provides robust JSON extraction from Claude Code's input
+  - Without jq: a bash fallback parser is used (works but less reliable)
 
-> **Without jq, your statusline will have LIMITED functionality:**
-> - ❌ No context remaining percentage
-> - ❌ No token statistics from ccusage  
-> - ❌ No session timer
-> - ⚠️ Basic fallback parser is used (less reliable)
+> **Without jq, most features still work** via the built-in bash fallback parser.
+> The main limitation is reduced reliability for JSON extraction on edge cases.
 
 #### macOS
 ```bash
@@ -89,7 +86,7 @@ jq --version
 
 ### Optional
 - **git** - For branch display (you probably have this)
-- **ccusage** - For usage stats (works via `npx` - no install needed)
+- **ccusage** - Only needed for session reset time feature (works via `npx` - no install needed)
 
 ## 🎯 Simple Setup
 
@@ -100,22 +97,22 @@ jq --version
 Enhance your Claude Code terminal with useful information:
 
 - **📁 Directory Display** - Current folder with `~` abbreviation
-- **🌿 Git Integration** - Current branch name  
+- **🌿 Git Integration** - Current branch name
 - **🤖 Model Info** - Shows which Claude model you're using plus Claude Code version
-- **🧠 Context Usage** - Real-time context window usage with progress bars **(requires jq)**
-- **💰 Cost Tracking** - Live cost monitoring with burn rates via ccusage **(partial without jq)**
-- **⌛ Session Timer** - Time remaining until usage limit resets **(requires jq)**
-- **📊 Token Analytics** - Token consumption and burn rate metrics **(requires jq)**
+- **🧠 Context Usage** - Real-time context window usage with progress bars
+- **💰 Cost Tracking** - Live cost monitoring with native burn rate calculation
+- **⌛ Session Timer** - Time remaining until usage limit resets **(requires ccusage)**
+- **📊 Token Analytics** - Native token consumption and TPM metrics from Claude Code data
 - **🎨 Color Support** - 256-color palette for Claude Code terminals
 - **⚡ Fast Execution** - Optimized bash script with <100ms execution time
 
 ## 🎛️ Features Overview
 
-### 🆕 Installation Options (v1.2.4+)
+### Installation Options
 - **🏠 Global Installation** (`~/.claude/`) - Use across all your projects
 - **📂 Project Installation** (`./.claude/`) - Keep settings project-specific
 
-### 🔥 Default Features (All Pre-selected in v1.2.2+)
+### Default Features (Pre-selected)
 | Feature | Description | Example |
 |---------|-------------|---------|
 | 📁 **Directory** | Current working directory | `~/my-project` |
@@ -124,28 +121,28 @@ Enhance your Claude Code terminal with useful information:
 | 📟 **Claude Code** | Claude Code version | `v1.0.85` |
 | 🎨 **Output Style** | Current output style setting | `default` |
 | 🧠 **Context** | Remaining context with progress bar | `83% [========--]` |
-| 💰 **Cost** | Live costs with highlighted burn rate | `$49.00 ($16.55/h)` |
-| ⌛ **Session** | Time until reset with progress | `3h 7m until reset at 01:00 (37%) [===-------]` |
+| 💰 **Cost** | Live costs with native burn rate | `$49.00 ($16.55/h)` |
+| 📊 **Tokens** | Native token consumption with TPM | `14638846 tok (279900 tpm)` |
 
-### 🚀 Power Features (Also Pre-selected)
-| Feature | Description | Example |
-|---------|-------------|---------|
-| 📊 **Tokens** | Token consumption with burn rate | `14638846 tok (279900 tpm)` |
+### Optional Features
+| Feature | Description | Dependency |
+|---------|-------------|------------|
+| ⌛ **Session** | Time until reset with progress bar | Requires **ccusage** |
 
 ### 🎨 Example Outputs
 
-**New 3-Line Modern Layout (v1.2.2+):**
+**Full Layout (all features enabled):**
 ```
 📁 ~/Projects/cc-statusline  🌿 feature/context-usage-output-styles  🤖 Sonnet 4  📟 v1.0.85  🎨 default
 🧠 Context Remaining: 83% [========--]  ⌛ 3h 7m until reset at 01:00 (37%) [===-------]
 💰 $49.00 ($16.55/h)  📊 14638846 tok (279900 tpm)
 ```
 
-**Compact Mode:**
+**Default Layout (session timer off):**
 ```
-📁 ~/my-app  🌿 main  🤖 Claude Sonnet  📟 v1.0.85
+📁 ~/my-app  🌿 main  🤖 Sonnet 4  📟 v1.0.85  🎨 default
 🧠 Context Remaining: 95% [=========-]
-💰 $2.48 ($12.50/h)
+💰 $2.48 ($12.50/h)  📊 523400 tok (8200 tpm)
 ```
 
 ## 🛠️ Advanced Usage
@@ -163,7 +160,7 @@ cc-statusline preview .claude/statusline.sh
 3. 📊 **Shows** exactly what the output will look like
 4. ⚡ **Reports** performance metrics and functionality
 
-### Installation Safety Features (v1.2.4+)
+### Installation Safety Features
 - 🔒 **Safe Updates** - Never overwrites existing statuslines without confirmation
 - 🛡️ **Settings Protection** - Preserves your existing settings.json configurations
 - ⚠️ **Conflict Detection** - Warns when other statuslines are configured
@@ -183,22 +180,18 @@ npm install -g @chongdashu/cc-statusline
 
 ## 🔧 How It Works
 
-### How It Works
-
-1. **🎯 Configuration** - Two questions configure your preferences
-2. **🏗️ Generation** - Creates optimized bash script tailored to your needs  
-3. **⚙️ Installation** - Integrates with Claude Code settings
-4. **🔄 Updates** - Connects to ccusage for live usage statistics
+1. **🎯 Configuration** - Interactive prompts configure your feature preferences
+2. **🏗️ Generation** - Creates an optimized bash script tailored to your selections
+3. **⚙️ Installation** - Integrates with Claude Code's `settings.json`
+4. **🔄 Runtime** - Script reads Claude Code's native JSON input for live data
 
 ### Technical Architecture
 
-- **⚡ Bash-First** - Native shell execution for maximum speed
+- **⚡ Bash-First** - Native shell execution for maximum speed (<100ms)
+- **📊 Native Data** - Token stats, cost, and burn rate use Claude Code's own data (no external tools)
 - **🎨 Claude Code Optimized** - Forces colors for Claude Code terminals (respects NO_COLOR)
-- **🌍 Environment Respect** - Honors `NO_COLOR` and other terminal conventions
-- **📦 Zero Dependencies** - Self-contained script with graceful fallbacks
-- **🔒 Secure** - No network requests except ccusage integration
-
-
+- **📦 Self-Contained** - Generated script has no runtime dependencies (jq recommended but optional)
+- **🔒 Secure** - No network requests (ccusage integration only when session feature is enabled)
 
 ## 📂 File Structure
 
@@ -237,8 +230,8 @@ If auto-configuration fails, simply add this to `.claude/settings.json`:
 - **Disable ccusage**: Remove usage tracking if not needed
 
 ### 🧩 Missing Features
-- **Install jq**: See the jq installation guide below
-- **ccusage setup**: Works automatically via `npx ccusage@latest`
+- **Install jq**: Recommended for reliable JSON parsing (see installation guide above)
+- **Session timer not showing**: Requires ccusage - works automatically via `npx ccusage@latest`
 - **Git not found**: Install git for branch display
 - **Context not showing**: Ensure you're in an active Claude Code session with context usage
 - **Colors not working**: Check that NO_COLOR environment variable is not set
@@ -250,7 +243,7 @@ If auto-configuration fails, simply add this to `.claude/settings.json`:
 | **Execution Time** | <100ms | 45-80ms |
 | **Memory Usage** | <5MB | ~2MB |
 | **CPU Impact** | Negligible | <1% |
-| **Dependencies** | Minimal | jq only |
+| **External Dependencies** | Minimal | jq (optional), ccusage (session only) |
 
 *Benchmarked on macOS with all features enabled*
 
@@ -275,41 +268,24 @@ See our [Contributing Guide](CONTRIBUTING.md) for detailed information.
 
 ## 🧪 Testing
 
-### Locking Mechanism Tests
+### Preview Testing
+Test your statusline with mock data before deploying:
 
-The ccusage integration includes a robust file-based locking mechanism to prevent concurrent process spawning. Test this functionality:
-
-**Single Test:**
 ```bash
-echo '{}' | ./test/test-statusline-with-lock.sh
+npm run build
+./dist/index.js preview .claude/statusline.sh
 ```
 
-**Concurrent Test:**
+### Installation Testing
+Run the installation test suite:
+
 ```bash
-./test/test-concurrent-locking.sh
+./test/test-installation.sh
 ```
 
-**Manual Concurrent Test:**
+### Manual Testing with Mock Data
 ```bash
-# Spawn 10 concurrent processes
-for i in {1..10}; do 
-  echo '{}' | ./test/test-statusline-with-lock.sh & 
-done
-```
-
-**Expected Behavior:**
-- ✅ Only 1 process runs ccusage at a time
-- ✅ Other processes skip gracefully (no pile-up)
-- ✅ Lock files are properly cleaned up
-- ✅ No hanging processes remain
-
-**Verification Commands:**
-```bash
-# Check for stale locks
-ls /tmp/ccusage_statusline.* 2>/dev/null || echo "✅ No locks remain"
-
-# Monitor running processes
-ps aux | grep ccusage | grep -v grep
+./test_debug.sh
 ```
 
 ## 📊 Stats
@@ -326,7 +302,7 @@ ps aux | grep ccusage | grep -v grep
 
 ## 🔗 Related Projects
 
-- **[ccusage](https://github.com/ryoppippi/ccusage)** - Claude Code usage analytics (would not be possible with it!)
+- **[ccusage](https://github.com/ryoppippi/ccusage)** - Claude Code usage analytics (used for session reset time feature)
 - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** - Official documentation
 
 ## 👥 Contributors
