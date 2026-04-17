@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-04-17
+
+### Added
+- ✨ **Toggleable Claude Code Version** - `📟 Claude Code Version` is now a selectable feature in the prompt (on by default)
+- ✨ **Toggleable Output Style** - `🎨 Output Style` is now a selectable feature in the prompt (on by default)
+  - Both were previously always displayed with no way to disable them
+  - Extraction and rendering are now gated on the respective feature flags
+
 ## [1.4.0] - 2025-12-24
 
 ### Changed

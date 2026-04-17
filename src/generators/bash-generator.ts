@@ -4,7 +4,7 @@ import { generateGitBashCode, generateGitDisplayCode, generateGitUtilities } fro
 import { generateUsageBashCode, generateUsageDisplayCode, generateUsageUtilities } from '../features/usage.js'
 
 // Version will be updated when releasing
-const VERSION = '1.4.0'
+const VERSION = '1.5.0'
 
 export function generateBashStatusline(config: StatuslineConfig): string {
   const hasGit = config.features.includes('git')
@@ -12,6 +12,8 @@ export function generateBashStatusline(config: StatuslineConfig): string {
   const hasDirectory = config.features.includes('directory')
   const hasModel = config.features.includes('model')
   const hasContext = config.features.includes('context')
+  const hasCcVersion = config.features.includes('ccversion')
+  const hasOutputStyle = config.features.includes('outputstyle')
 
   // Build usage feature config
   const usageConfig = {
@@ -50,12 +52,12 @@ ${generateColorBashCode({ enabled: config.colors, theme: config.theme })}
 ${config.colors ? generateBasicColors() : ''}
 ${hasUsage ? generateUsageUtilities() : ''}
 ${hasGit ? generateGitUtilities() : ''}
-${generateBasicDataExtraction(hasDirectory, hasModel, hasContext)}
+${generateBasicDataExtraction(hasDirectory, hasModel, hasContext, hasCcVersion, hasOutputStyle)}
 ${hasGit ? generateGitBashCode(gitConfig, config.colors) : ''}
 ${hasContext ? generateContextBashCode(config.colors) : ''}
 ${hasUsage ? generateUsageBashCode(usageConfig, config.colors) : ''}
 ${config.logging ? generateLoggingOutput() : ''}
-${generateDisplaySection(config, gitConfig, usageConfig)}
+${generateDisplaySection(config, gitConfig, usageConfig, hasCcVersion, hasOutputStyle)}
 `
 
   return script.replace(/\n\n\n+/g, '\n\n').trim() + '\n'
@@ -120,7 +122,7 @@ extract_json_string() {
 `
 }
 
-function generateBasicDataExtraction(hasDirectory: boolean, hasModel: boolean, hasContext: boolean): string {
+function generateBasicDataExtraction(hasDirectory: boolean, hasModel: boolean, hasContext: boolean, hasCcVersion: boolean, hasOutputStyle: boolean): string {
   return `
 ${generateJsonExtractorCode()}
 # ---- basics ----
@@ -128,33 +130,31 @@ if [ "$HAS_JQ" -eq 1 ]; then${hasDirectory ? `
   current_dir=$(echo "$input" | jq -r '.workspace.current_dir // .cwd // "unknown"' 2>/dev/null | sed "s|^$HOME|~|g")` : ''}${hasModel ? `
   model_name=$(echo "$input" | jq -r '.model.display_name // "Claude"' 2>/dev/null)
   model_version=$(echo "$input" | jq -r '.model.version // ""' 2>/dev/null)` : ''}${hasContext ? `
-  session_id=$(echo "$input" | jq -r '.session_id // ""' 2>/dev/null)` : ''}
-  cc_version=$(echo "$input" | jq -r '.version // ""' 2>/dev/null)
-  output_style=$(echo "$input" | jq -r '.output_style.name // ""' 2>/dev/null)
+  session_id=$(echo "$input" | jq -r '.session_id // ""' 2>/dev/null)` : ''}${hasCcVersion ? `
+  cc_version=$(echo "$input" | jq -r '.version // ""' 2>/dev/null)` : ''}${hasOutputStyle ? `
+  output_style=$(echo "$input" | jq -r '.output_style.name // ""' 2>/dev/null)` : ''}
 else${hasDirectory ? `
   # Bash fallback for JSON extraction
   # Extract current_dir from workspace object - look for the pattern workspace":{"current_dir":"..."}
   current_dir=$(echo "$input" | grep -o '"workspace"[[:space:]]*:[[:space:]]*{[^}]*"current_dir"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"current_dir"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/' | sed 's/\\\\\\\\/\\//g')
-  
+
   # Fall back to cwd if workspace extraction failed
   if [ -z "$current_dir" ] || [ "$current_dir" = "null" ]; then
     current_dir=$(echo "$input" | grep -o '"cwd"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"cwd"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/' | sed 's/\\\\\\\\/\\//g')
   fi
-  
+
   # Fallback to unknown if all extraction failed
   [ -z "$current_dir" ] && current_dir="unknown"
   current_dir=$(echo "$current_dir" | sed "s|^$HOME|~|g")` : ''}${hasModel ? `
-  
+
   # Extract model name from nested model object
   model_name=$(echo "$input" | grep -o '"model"[[:space:]]*:[[:space:]]*{[^}]*"display_name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"display_name"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/')
   [ -z "$model_name" ] && model_name="Claude"
-  # Model version is in the model ID, not a separate field  
+  # Model version is in the model ID, not a separate field
   model_version=""  # Not available in Claude Code JSON` : ''}${hasContext ? `
-  session_id=$(extract_json_string "$input" "session_id" "")` : ''}
-  # CC version is at the root level
-  cc_version=$(echo "$input" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/')
-  # Output style is nested
-  output_style=$(echo "$input" | grep -o '"output_style"[[:space:]]*:[[:space:]]*{[^}]*"name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"name"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/')
+  session_id=$(extract_json_string "$input" "session_id" "")` : ''}${hasCcVersion ? `
+  cc_version=$(echo "$input" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/')` : ''}${hasOutputStyle ? `
+  output_style=$(echo "$input" | grep -o '"output_style"[[:space:]]*:[[:space:]]*{[^}]*"name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"name"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/')` : ''}
 fi
 `
 }
@@ -211,7 +211,7 @@ function generateLoggingOutput(): string {
 `
 }
 
-function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageConfig: any): string {
+function generateDisplaySection(config: StatuslineConfig, gitConfig: any, usageConfig: any, hasCcVersion: boolean, hasOutputStyle: boolean): string {
   const emojis = config.colors && !config.customEmojis
 
   return `
@@ -224,13 +224,13 @@ fi` : ''}${config.features.includes('model') ? `
 printf '  🤖 %s%s%s' "$(model_color)" "$model_name" "$(rst)"
 if [ -n "$model_version" ] && [ "$model_version" != "null" ]; then
   printf '  🏷️ %s%s%s' "$(version_color)" "$model_version" "$(rst)"
-fi` : ''}
+fi` : ''}${hasCcVersion ? `
 if [ -n "$cc_version" ] && [ "$cc_version" != "null" ]; then
   printf '  📟 %sv%s%s' "$(cc_version_color)" "$cc_version" "$(rst)"
-fi
+fi` : ''}${hasOutputStyle ? `
 if [ -n "$output_style" ] && [ "$output_style" != "null" ]; then
   printf '  🎨 %s%s%s' "$(style_color)" "$output_style" "$(rst)"
-fi
+fi` : ''}
 
 # Line 2: Context and session time
 line2=""${config.features.includes('context') ? `
