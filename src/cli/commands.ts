@@ -15,7 +15,8 @@ interface InitOptions {
 
 function checkJqInstallation(): boolean {
   try {
-    execSync('command -v jq', { stdio: 'ignore' })
+    const isWindows = process.platform === 'win32';
+    execSync(isWindows ? 'where jq' : 'command -v jq', { stdio: 'ignore' })
     return true
   } catch {
     return false
