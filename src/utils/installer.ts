@@ -90,9 +90,16 @@ async function updateSettingsJson(claudeDir: string, scriptName: string, isGloba
       }
     }
 
-    // Update statusLine configuration - Windows needs explicit bash command
+    // Update statusLine configuration
+    // On Windows (Git Bash), global installs need an absolute path in Unix format
+    // because Claude Code runs the statusline command from the project dir, not home dir.
+    // Relative `.claude/statusline.sh` only resolves correctly when CWD is home dir.
+    const toGitBashPath = (winPath: string): string =>
+      winPath.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, d) => `/${d.toLowerCase()}`)
     const commandPath = process.platform === 'win32'
-      ? `bash ${isGlobal ? '.claude' : '.claude'}/${scriptName}`
+      ? isGlobal
+        ? `bash ${toGitBashPath(os.homedir())}/.claude/${scriptName}`
+        : `bash .claude/${scriptName}`
       : (isGlobal ? `~/.claude/${scriptName}` : `.claude/${scriptName}`)
     
     settings.statusLine = {
