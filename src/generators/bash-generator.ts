@@ -14,8 +14,12 @@ export function generateBashStatusline(config: StatuslineConfig): string {
   const hasContext = config.features.includes('context')
 
   // Build usage feature config
+  // Note: `enabled` gates the entire cost/tokens/burnrate extraction block.
+  // It must NOT depend on `ccusageIntegration` — only the session-reset-time
+  // sub-block needs ccusage, and that sub-block is independently gated
+  // by `needsCcusage` inside generateUsageBashCode.
   const usageConfig = {
-    enabled: hasUsage && config.ccusageIntegration,
+    enabled: hasUsage,
     showCost: config.features.includes('usage'),
     showTokens: config.features.includes('tokens'),
     showBurnRate: config.features.includes('burnrate'),
@@ -37,6 +41,9 @@ export function generateBashStatusline(config: StatuslineConfig): string {
 # Custom Claude Code statusline - Created: ${timestamp}
 # Theme: ${config.theme} | Colors: ${config.colors} | Features: ${config.features.join(', ')}
 STATUSLINE_VERSION="${VERSION}"
+
+# Force C locale so printf/awk use '.' as decimal separator regardless of user locale
+export LC_NUMERIC=C
 
 input=$(cat)
 
